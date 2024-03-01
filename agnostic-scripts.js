@@ -455,5 +455,9 @@ function if_octane_say_title(str) {
 }
 
 function if_octane_say_room(str) {
-    if_octane_process_say_title(str, 2);
+    if_octane_process_say_title(str, 3);
+}
+
+function if_octane_say_turn(action, num) {
+    if_octane_process_say_title(action + " report \u2014 Turn " + String(num), 2);
 }

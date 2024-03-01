@@ -1,4 +1,4 @@
-.action-button, p {
+.action-button, p, h2 {
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
     font-size: 12pt;
     animation: fadeIn 1s;
@@ -82,36 +82,37 @@
     background-attachment: local, local, scroll, scroll;
 }
 
-#init-transcript-area,
-#transcript-area {
+.transcript-div {
     max-width: 600px;
     margin: auto;
     padding: 8px;
-}
-
-#init-transcript-area {
+    padding-top: 0;
     padding-bottom: 0;
 }
 
-#transcript-area {
-    padding-top: 0;
+#init-transcript-area {
+    padding-top: 8px;
 }
 
 #bottom-page-spacer {
     min-height: 20vh;
 }
 
-h1, .author-info, .blurb-info, .tiny-info {
+h1, h2, .author-info, .blurb-info, .tiny-info {
     text-align: center;
 }
 
-h2 {
+h3 {
     margin-left: 16px;
     animation: fadeIn 0.25s;
 }
 
-h1, h2 {
-    color: #A0A0A0;
+h1, h3 {
+    color: #A4A2A0;
+}
+
+h2 {
+    color: #C4C2C0;
 }
 
 .blurb-info {
@@ -161,12 +162,16 @@ h1, h2 {
         background-color: black;
     }
 
-    b, strong, h1, h2 {
+    b, strong {
         color: white;
     }
 
-    h1, h2 {
+    h1, h2, h3 {
         color: #606264;
+    }
+
+    h2 {
+        color: #404244;
     }
     
     #transcript-darkener {
