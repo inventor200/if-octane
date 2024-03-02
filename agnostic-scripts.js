@@ -163,7 +163,6 @@ function doOnReadyAfter(lookID, readyFunc, funcID) {
 // This runs on program start.
 function if_octane_doReady() {
     printCredits();
-    if_octane_say_turn("introduction");
 
     for (let i = 0; i < if_octane_ready_functions.length; i++) {
         if_octane_ready_functions[i].code();
@@ -183,6 +182,7 @@ const IF_OCTANE_CAP_CHANGE_DOWN = 2;
 var if_octane_cap_change_status = IF_OCTANE_NO_CAP_CHANGE;
 
 function if_octane_process_say_string(str) {
+    str = str.replace(/\.\.\./g, "\u2026");
     if (!str) return if_octane_process_say_string('<br>');
 
     // Sterilize
@@ -459,34 +459,7 @@ function if_octane_say_room(str) {
     if_octane_process_say_title(str, 3);
 }
 
-function if_octane_say_turn(action, num) {
-    const maxLen = 16;
-    let printedAction = action.substring(0, 1).toUpperCase();
-    printedAction += action.substring(1);
-    const actionParts = printedAction.split(' ');
-    let truncatedAction = actionParts[0];
-    let truncatedLen = actionParts[0].length;
-    let truncatedCount = 1;
-    while (
-        truncatedCount < actionParts.length &&
-        truncatedLen + actionParts[truncatedCount].length + 1 < maxLen
-    ) {
-        truncatedAction += " " + actionParts[truncatedCount];
-        truncatedLen = truncatedAction.length;
-        truncatedCount++;
-    }
-    if (truncatedLen < action.length) {
-        truncatedAction += "\u2026";
-    }
-    let title = truncatedAction + " report";
-    if (num) {
-        title += " \u2014 Turn " + String(num);
-    }
-    if_octane_process_say_title(title, 2);
-}
-
 function if_octane_start_new_turn(action) {
-    if_octane_separate_turn_text();
     if_octane_turn_counter++;
-    if_octane_say_turn(action, if_octane_turn_counter);
+    if_octane_separate_turn_text(action);
 }
