@@ -1,16 +1,9 @@
 var if_octane_output_element = null;
 var if_octane_init_output_element = null;
-var if_octane_use_init_output = true;
 
 function if_octane_get_output_element() {
-    if (if_octane_use_init_output) {
-        if (!if_octane_init_output_element) {
-            if_octane_init_output_element = document.getElementById("init-transcript-area");
-        }
-        return if_octane_init_output_element;
-    }
     if (!if_octane_output_element) {
-        if_octane_output_element = document.getElementById("transcript-area");
+        if_octane_output_element = document.getElementById("init-transcript-area");
     }
     return if_octane_output_element;
 }
@@ -187,6 +180,7 @@ function if_octane_create_inline_button(str, tooltip, func, clickOnce=false) {
             if_octane_spend_button(_button, true);
         }
         _button.hasBeenPressed = true;
+        if_octane_start_new_turn(_button.title);
         func();
     });
     return button;
@@ -204,6 +198,15 @@ function if_octane_spend_button(buttonElement, isSpent=false) {
     }
 }
 
-function if_octane_finalize_first_print() {
-    if_octane_use_init_output = false;
+function if_octane_separate_turn_text() {
+    const spacer = document.getElementById("bottom-page-spacer");
+    const parent = spacer.parentElement;
+    if_octane_output_element.setAttribute("aria-live", "off");
+    if_octane_output_element.removeAttribute("role");
+    const newTranscript = document.createElement("div");
+    newTranscript.className = "transcript-div";
+    newTranscript.setAttribute("aria-live", "polite");
+    newTranscript.setAttribute("role", "status");
+    parent.insertBefore(newTranscript, spacer);
+    if_octane_output_element = newTranscript;
 }

@@ -1,6 +1,12 @@
-.action-button, p, h2 {
+.action-button, .author-info, .blurb-info, .tiny-info, p, h2, h3 {
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+}
+
+.action-button, p, h2, h3 {
     font-size: 12pt;
+}
+
+.action-button, p, h3 {
     animation: fadeIn 1s;
 }
 
@@ -98,7 +104,7 @@
     min-height: 20vh;
 }
 
-h1, h2, .author-info, .blurb-info, .tiny-info {
+h1, .author-info, .blurb-info, .tiny-info {
     text-align: center;
 }
 
@@ -113,6 +119,25 @@ h1, h3 {
 
 h2 {
     color: #C4C2C0;
+    display: flex;
+    align-items: center;
+    text-align: center;
+    animation: fadeIn 0.25s;
+}
+
+h2::before,
+h2::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid #C4C2C0;
+}
+
+h2:not(:empty)::before {
+    margin-right: .25em;
+}
+
+h2:not(:empty)::after {
+    margin-left: .25em;
 }
 
 .blurb-info {
@@ -125,7 +150,7 @@ h2 {
 }
 
 .tiny-info {
-    font-size: 8pt;
+    font-size: 9pt;
 }
 
 .action-button {
@@ -137,6 +162,7 @@ h2 {
     font-weight: bold;
     cursor: pointer;
     user-select: text;
+    -webkit-user-select: text;
 }
 
 .action-button:disabled,
@@ -153,7 +179,8 @@ h2 {
     width: 1px;
     height: 1px;
     overflow: hidden;
-    user-select: none
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -172,6 +199,11 @@ h2 {
 
     h2 {
         color: #404244;
+    }
+
+    h2::before,
+    h2::after {
+        border-bottom: 1px solid #404244;
     }
     
     #transcript-darkener {
