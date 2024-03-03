@@ -273,23 +273,17 @@ function if_octane_separate_turn_text(action) {
 function if_octane_announce_turn_addition() {
     // Let screen readers know that new content is available
     if_octane_show_sr_announcement(
-        "Report written! Turn " +
+        "New report written below! Turn " +
         String(if_octane_turn_counter) +
         ", at heading level 2."
     );
 
     // Update page navigate to create a shortcut
     if (!if_octane_latest_report_shortcut_element) {
-        // Create shortcut
-        const parent = document.getElementById("nav-shortcuts");
-        const listing = document.createElement("li");
-
-        if_octane_latest_report_shortcut_element = document.createElement("a");
-        if_octane_latest_report_shortcut_element.innerText = "Latest report";
-        parent.appendChild(listing);
-        listing.appendChild(if_octane_latest_report_shortcut_element);
+        if_octane_latest_report_shortcut_element = document.getElementById("latest-shortcut");
         if_octane_show_sr_announcement(
-            "A new shortcut has been created for you in the navigation landmark!"
+            "Remember, the latest report shortcut in the navigation landmark " +
+            "can also take you there!"
         );
     }
 

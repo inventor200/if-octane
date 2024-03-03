@@ -287,12 +287,14 @@ html-minifier \
 # We do this last because minifying removes comments.
 echo "<!-- UUID://$PROJ_IFID// -->" >> "$OUT_DIR/index.html"
 
-function sanitize_file_name {
-    echo -n $1 | perl -pe 's/[\?\[\]\/\\=<>:;,''"&\$#*()|~`!{}%+]//g;' -pe 's/[\r\n\t -]+/-/g;'
-}
+if [ $USE_DEBUG_MODE -eq 0 ]; then
+    function sanitize_file_name {
+        echo -n $1 | perl -pe 's/[\?\[\]\/\\=<>:;,''"&\$#*()|~`!{}%+]//g;' -pe 's/[\r\n\t -]+/-/g;'
+    }
 
-FINAL_FILE_NAME="$PROJ_TITLE-$PROJ_VERSION.html"
-CLEAN_FILE_NAME=$(sanitize_file_name "$FINAL_FILE_NAME")
-mv "$OUT_DIR/index.html" "$OUT_DIR/$CLEAN_FILE_NAME"
+    FINAL_FILE_NAME="$PROJ_TITLE-$PROJ_VERSION.html"
+    CLEAN_FILE_NAME=$(sanitize_file_name "$FINAL_FILE_NAME")
+    mv "$OUT_DIR/index.html" "$OUT_DIR/$CLEAN_FILE_NAME"
+fi
 
 echo "Done!"
