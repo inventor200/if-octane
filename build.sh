@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+mkdir -p "$IF_OCTANE_ENGINE_PATH/precrunch"
+mkdir -p "$IF_OCTANE_ENGINE_PATH/cache"
+
 USE_DEBUG_MODE=0
 for BUILD_ARG in "$@" 
 do
