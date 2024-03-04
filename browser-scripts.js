@@ -4,6 +4,90 @@ var if_octane_sr_announcements_element = null;
 var if_octane_latest_report_number = 0;
 const if_octane_report_sections = [];
 const IF_OCTANE_LATEST_REPORT_ID = "latest-transcript-report";
+const IF_OCTANE_LIVE_REGION_LOCK_DELAY = 1000;
+
+class LiveRegionManager {
+    constructor(id) {
+        this.id = id;
+        this.div = undefined;
+        this.mainBuffer = [];
+        this.secondaryBuffer = [];
+        this.isLocked = false;
+    }
+
+    getDiv() {
+        if (!this.div) {
+            this.div = document.getElementById(this.id);
+        }
+
+        return this.div;
+    }
+
+    clearDiv() {
+        const div = this.getDiv();
+
+        while (div.childElementCount > 0) {
+            this.clearElement(div.children[0]);
+        }
+    }
+
+    clearElement(el) {
+        el.remove();
+    }
+
+    addMessage(str) {
+        if (this.isLocked) {
+            this.secondaryBuffer.push(str);
+        }
+        else {
+            this.mainBuffer.push(str);
+        }
+    }
+
+    startDump() {
+        if (this.mainBuffer.length === 0) return;
+
+        this.isLocked = true;
+        this.iterateDump();
+    }
+
+    iterateDump() {
+        if (this.mainBuffer.length === 0) return;
+
+        this.clearDiv();
+
+        const packet = document.createElement("div");
+
+        while (this.mainBuffer.length > 0) {
+            const announcement = document.createElement("p");
+            announcement.textContent = this.mainBuffer.shift();
+            packet.appendChild(announcement);
+        }
+
+        this.getDiv().appendChild(packet);
+
+        const _this = this;
+        setTimeout(() => { _this.endDump(); }, IF_OCTANE_LIVE_REGION_LOCK_DELAY);
+    }
+
+    endDump() {
+        // Make sure there are no stragglers
+        if (this.secondaryBuffer.length === 0) {
+            this.isLocked = false;
+            return;
+        }
+
+        while (this.secondaryBuffer.length > 0) {
+            this.mainBuffer.push(this.secondaryBuffer.shift());
+        }
+
+        this.iterateDump();
+    }
+}
+
+// Firefox forces aria-atomic="true" behavior, so we are using a manager
+// to enforce the correct behavior.
+const announcementManager = new LiveRegionManager("sr-announcements");
 
 function if_octane_get_output_element() {
     if (!if_octane_output_element) {
@@ -194,26 +278,16 @@ function if_octane_create_inline_button(str, tooltip, func, clickOnce=false) {
         _button.hasBeenPressed = true;
         if_octane_start_new_turn(_button.title);
         func();
+        if_octane_end_new_turn();
     });
     return button;
-}
-
-function if_octane_show_sr_announcement(str) {
-    const announcement = document.createElement('div');
-    announcement.innerText = str;
-
-    if (!if_octane_sr_announcements_element) {
-        if_octane_sr_announcements_element = document.getElementById("sr-announcements");
-    }
-
-    if_octane_sr_announcements_element.appendChild(announcement);
 }
 
 function if_octane_spend_button(buttonElement, isSpent=false) {
     buttonElement.setAttribute("aria-disabled", "true");
     if (isSpent) {
         // Announce to screen readers that the button has been disabled.
-        if_octane_show_sr_announcement("Push button is now spent and grayed.");
+        announcementManager.addMessage("Push button is now spent and grayed.");
     }
 }
 
@@ -278,9 +352,23 @@ function if_octane_separate_turn_text(action) {
     if_octane_announce_turn_addition();
 }
 
+var if_octane_has_explained_scrolling = false;
+
 function if_octane_announce_turn_addition() {
     // Let screen readers know that new content is available
-    if_octane_show_sr_announcement(
+    announcementManager.addMessage(
         "New text has been written below."
     );
+
+    if (!if_octane_has_explained_scrolling) {
+        if_octane_has_explained_scrolling = true;
+        announcementManager.addMessage(
+            "You can continue reading from here, or "+
+            "jump to the next heading level 2."
+        );
+    }
+}
+
+function if_octane_end_new_turn() {
+    announcementManager.startDump();
 }
