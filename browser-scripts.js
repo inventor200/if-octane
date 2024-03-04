@@ -417,19 +417,21 @@ function if_octane_separate_turn_text(action) {
     gotoLink.innerText = "Jump to latest content";
     gotoLink.className = "latest-link";
     gotoLink.href = "#" + IF_OCTANE_LATEST_REPORT_ID;
+    gotoLink.style.display = "none";
     newTranscript.appendChild(gotoLink);
-    //TODO: Do not show this link on the latest
 
     // Set the latest section element to not be the latest anymore
     if (if_octane_report_sections.length > 0) {
         const prevSection = if_octane_report_sections[if_octane_report_sections.length - 1];
         prevSection.header.removeAttribute("id");
+        prevSection.gotoLink.style.display = "block";
     }
 
     newHeader.id = IF_OCTANE_LATEST_REPORT_ID;
 
     if_octane_report_sections.push({
         header: newHeader,
+        gotoLink: gotoLink,
         transcriptDiv: newTranscript
     });
 

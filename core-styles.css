@@ -23,6 +23,7 @@
     height: 100vh;
     left: 0;
     right: 0;
+    z-index: -1;
 }
 
 #background-left,
@@ -50,7 +51,12 @@
     height: 100%;
 
     background-color: white;
-    z-index: -1;
+    z-index: -2;
+}
+
+body {
+    margin: 0;
+    padding: 0;
 }
 
 #game-container {
@@ -88,6 +94,8 @@
     background-repeat: no-repeat;
     background-size: 100% 24px, 100% 12vh, 100% 8px, 100% 4vh;
     background-attachment: local, local, scroll, scroll;
+
+    z-index: 0;
 }
 
 .transcript-div {
@@ -130,24 +138,7 @@ h1, h3 {
 
 h2 {
     color: #C4C2C0;
-    display: flex;
-    align-items: center;
     text-align: center;
-}
-
-h2::before,
-h2::after {
-    content: '';
-    flex: 1;
-    border-bottom: 1px solid #C4C2C0;
-}
-
-h2:not(:empty)::before {
-    margin-right: .25em;
-}
-
-h2:not(:empty)::after {
-    margin-left: .25em;
 }
 
 .blurb-info {
@@ -175,8 +166,6 @@ h2:not(:empty)::after {
     text-decoration: underline;
     font-weight: bold;
     cursor: pointer;
-    user-select: text;
-    -webkit-user-select: text;
 }
 
 .action-button:disabled,
@@ -203,8 +192,6 @@ a:active {
     width: 1px;
     height: 1px;
     overflow: hidden;
-    user-select: none;
-    -webkit-user-select: none;
 }
 
 @media (prefers-color-scheme: dark) {
