@@ -1,13 +1,7 @@
-<header class="sr-only">
-    <nav aria-label="Shortcuts">
-        <ol id="nav-shortcuts">
-            <li><a id="latest-shortcut" href="#init-transcript-area">Latest report</a></li>
-            <li><a href="#init-transcript-area">Introduction</a></li>
-        </ol>
-    </nav>
-    <div id="sr-announcements" class="sr-only"
-    aria-live="polite" role="status"></div>
-</header>
+<!-- Skipping role="status" to avoid this bug: -->
+<!-- https://bugzilla.mozilla.org/show_bug.cgi?id=1810596 -->
+<!-- <div id="sr-announcements" class="sr-only" aria-live="polite" role="status"></div> -->
+<div id="sr-announcements" class="sr-only" aria-live="polite"></div>
 <div id="background-container" aria-hidden="true">
     <div id="background-left"></div>
     <div id="background-right"></div>
@@ -15,6 +9,27 @@
 </div>
 <main id="game-container">
     <div class="transcript-div" id="init-transcript-area"
-    aria-label="Beginning"></div>
+    aria-label="Beginning">
+        <p class="tiny-info" style="text-align: left !important;">
+            <b>Notice for TalkBack users on Firefox:</b>
+        </p>
+        <p class="tiny-info" style="text-align: left !important;">
+            As of March 2nd, 2024, aria-live announcements are broken
+            with the TalkBack screen reader, while using the Firefox browser for
+            Android.
+        </p>
+        <p class="tiny-info" style="text-align: left !important;">
+            For this reason, it is recommended that you play this game in Google Chrome,
+            if you are using TalkBack on an Android device.
+        </p>
+        <p class="tiny-info" style="text-align: left !important;">
+            Your understanding is appreciated.
+        </p>
+        <p class="tiny-info" style="text-align: left !important;">
+            <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=1810596">
+                For more information, check this bug report page.
+            </a>
+        </p>
+    </div>
     <div class="transcript-div" id="bottom-page-spacer" aria-hidden="true"></div>
 </main>

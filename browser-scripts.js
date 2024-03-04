@@ -2,7 +2,8 @@ var if_octane_output_element = null;
 var if_octane_force_new_paragraph = false;
 var if_octane_sr_announcements_element = null;
 var if_octane_latest_report_number = 0;
-var if_octane_latest_report_shortcut_element = null;
+const if_octane_report_sections = [];
+const IF_OCTANE_LATEST_REPORT_ID = "latest-transcript-report";
 
 function if_octane_get_output_element() {
     if (!if_octane_output_element) {
@@ -216,10 +217,6 @@ function if_octane_spend_button(buttonElement, isSpent=false) {
     }
 }
 
-function if_octane_get_report_id() {
-    return "transcript-report-" + String(if_octane_latest_report_number);
-}
-
 function if_octane_get_truncated_turn_header(action) {
     const maxLen = 16;
     const actionParts = action.toLowerCase().split(' ');
@@ -248,24 +245,35 @@ function if_octane_get_truncated_turn_header(action) {
 }
 
 function if_octane_separate_turn_text(action) {
-    if_octane_latest_report_number++;
-
-    const reportID = if_octane_get_report_id();
-    const headerID = reportID + "-header";
-
     const spacer = document.getElementById("bottom-page-spacer");
     const parent = spacer.parentElement;
     const newTranscript = document.createElement("div");
     newTranscript.className = "transcript-div";
-    newTranscript.setAttribute("aria-labelledby", headerID)
     parent.insertBefore(newTranscript, spacer);
     if_octane_output_element = newTranscript;
-    //newTranscript.id = reportID;
 
     const newHeader = document.createElement("h2");
-    newHeader.id = headerID;
     newHeader.innerText = if_octane_get_truncated_turn_header(action);
     newTranscript.appendChild(newHeader);
+
+    const gotoLink = document.createElement("a");
+    gotoLink.innerText = "Jump to latest";
+    gotoLink.className = "latest-link";
+    gotoLink.href = "#" + IF_OCTANE_LATEST_REPORT_ID;
+    newTranscript.appendChild(gotoLink);
+
+    // Set the latest section element to not be the latest anymore
+    if (if_octane_report_sections.length > 0) {
+        const prevSection = if_octane_report_sections[if_octane_report_sections.length - 1];
+        prevSection.header.removeAttribute("id");
+    }
+
+    newHeader.id = IF_OCTANE_LATEST_REPORT_ID;
+
+    if_octane_report_sections.push({
+        header: newHeader,
+        transcriptDiv: newTranscript
+    });
 
     if_octane_announce_turn_addition();
 }
@@ -273,20 +281,6 @@ function if_octane_separate_turn_text(action) {
 function if_octane_announce_turn_addition() {
     // Let screen readers know that new content is available
     if_octane_show_sr_announcement(
-        "New report written below! Turn " +
-        String(if_octane_turn_counter) +
-        ", at heading level 2."
+        "New text has been written below."
     );
-
-    // Update page navigate to create a shortcut
-    if (!if_octane_latest_report_shortcut_element) {
-        if_octane_latest_report_shortcut_element = document.getElementById("latest-shortcut");
-        if_octane_show_sr_announcement(
-            "Remember, the latest report shortcut in the navigation landmark " +
-            "can also take you there!"
-        );
-    }
-
-    if_octane_latest_report_shortcut_element.href =
-        "#" + if_octane_get_report_id() + "-header";
 }

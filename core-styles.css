@@ -1,4 +1,4 @@
-.action-button, .author-info, .blurb-info, .tiny-info, p, h2, h3 {
+.action-button, .author-info, .blurb-info, .tiny-info, .latest-link, p, h2, h3 {
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
 }
 
@@ -104,13 +104,16 @@
     min-height: 20vh;
 }
 
-h1, .author-info, .blurb-info, .tiny-info {
+h1, h2, h3, .author-info, .blurb-info, .tiny-info, .latest-link {
+    animation: fadeIn 0.25s;
+}
+
+h1, .author-info, .blurb-info, .tiny-info, .latest-link {
     text-align: center;
 }
 
 h3 {
     margin-left: 16px;
-    animation: fadeIn 0.25s;
 }
 
 h1, h3 {
@@ -122,7 +125,6 @@ h2 {
     display: flex;
     align-items: center;
     text-align: center;
-    animation: fadeIn 0.25s;
 }
 
 h2::before,
@@ -149,8 +151,12 @@ h2:not(:empty)::after {
     font-weight: 800;
 }
 
-.tiny-info {
+.tiny-info, .latest-link {
     font-size: 9pt;
+}
+
+.latest-link {
+    display: block;
 }
 
 .action-button {
@@ -170,6 +176,16 @@ h2:not(:empty)::after {
 .action-button[aria-disabled=true] {
     color: #404244;
     text-decoration: none;
+}
+
+a:link, a:hover, a.latest-link:visited {
+    color: #006688;
+}
+a:visited {
+    color: #660088;
+}
+a:active {
+    color: #66AAFF;
 }
 
 .sr-only {
@@ -212,6 +228,16 @@ h2:not(:empty)::after {
 
     .action-button {
         color: #00AAFF;
+    }
+
+    a:link, a:hover, a.latest-link:visited {
+        color: #00AAFF;
+    }
+    a:visited {
+        color: #AA00FF;
+    }
+    a:active {
+        color: #66AAFF;
     }
 
     .action-button:disabled,
