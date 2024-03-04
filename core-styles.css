@@ -6,7 +6,9 @@
     font-size: 12pt;
 }
 
-.action-button, p, h3 {
+#sr-announcements .action-button,
+#sr-announcements p,
+#sr-announcements h3 {
     animation: fadeIn 1s;
 }
 
@@ -104,7 +106,13 @@
     min-height: 20vh;
 }
 
-h1, h2, h3, .author-info, .blurb-info, .tiny-info, .latest-link {
+#sr-announcements h1,
+#sr-announcements h2,
+#sr-announcements h3,
+#sr-announcements .author-info,
+#sr-announcements .blurb-info,
+#sr-announcements .tiny-info,
+#sr-announcements .latest-link {
     animation: fadeIn 0.25s;
 }
 

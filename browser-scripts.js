@@ -4,7 +4,14 @@ var if_octane_sr_announcements_element = null;
 var if_octane_latest_report_number = 0;
 const if_octane_report_sections = [];
 const IF_OCTANE_LATEST_REPORT_ID = "latest-transcript-report";
-const IF_OCTANE_LIVE_REGION_LOCK_DELAY = 1000;
+const IF_OCTANE_LIVE_REGION_LOCK_DELAY = 250;
+
+var if_octane_paragraphs_count = 0;
+var if_octane_inline_action_count = 0;
+var if_octane_grouped_action_count = 0;
+
+const ANNOUNCEMENT_TYPE_TEXT = 0;
+const ANNOUNCEMENT_TYPE_AUDIO = 1;
 
 class LiveRegionManager {
     constructor(id) {
@@ -13,6 +20,14 @@ class LiveRegionManager {
         this.mainBuffer = [];
         this.secondaryBuffer = [];
         this.isLocked = false;
+        this.fusionDiv = undefined;
+        this.announcementPacket = undefined;
+        this.reportPacket = [];
+        this.nextReportPacket = [];
+    }
+
+    assignTranscript(transcriptDiv) {
+        this.nextReportPacket.push(transcriptDiv);
     }
 
     getDiv() {
@@ -23,24 +38,55 @@ class LiveRegionManager {
         return this.div;
     }
 
+    shiftContent(contentDiv) {
+        this.getDiv().parentElement.insertBefore(
+            contentDiv, this.getDiv()
+        );
+    }
+
     clearDiv() {
-        const div = this.getDiv();
+        if (!this.fusionDiv) return;
 
-        while (div.childElementCount > 0) {
-            this.clearElement(div.children[0]);
+        // Move out the fusion div
+        this.shiftContent(this.fusionDiv);
+
+        // Delete the announcement packet
+        if (this.announcementPacket) {
+            this.announcementPacket.remove();
+            this.announcementPacket = undefined;
         }
+
+        // Move report out
+        while (this.reportPacket.length > 0) {
+            this.shiftContent(this.reportPacket.shift());
+        }
+
+        // Delete the fusion div
+        this.fusionDiv.remove();
+        this.fusionDiv = undefined;
     }
 
-    clearElement(el) {
-        el.remove();
-    }
+    addMessage(str, msgType=ANNOUNCEMENT_TYPE_TEXT) {
+        const newMsg = {
+            content: str,
+            type: msgType
+        };
 
-    addMessage(str) {
+        let dest = this.mainBuffer;
         if (this.isLocked) {
-            this.secondaryBuffer.push(str);
+            dest = this.secondaryBuffer;
+        }
+
+        // Audio clips always play before anything else
+        if (msgType === ANNOUNCEMENT_TYPE_AUDIO && dest.length > 0) {
+            for (let i = 0; i < dest.length; i++) {
+                const currentType = dest[i].type;
+                if (currentType === ANNOUNCEMENT_TYPE_AUDIO) continue;
+                dest.insert(i, newMsg);
+            }
         }
         else {
-            this.mainBuffer.push(str);
+            dest.push(newMsg);
         }
     }
 
@@ -48,31 +94,66 @@ class LiveRegionManager {
         if (this.mainBuffer.length === 0) return;
 
         this.isLocked = true;
+        this.clearDiv();
         this.iterateDump();
     }
 
     iterateDump() {
         if (this.mainBuffer.length === 0) return;
 
-        this.clearDiv();
-
-        const packet = document.createElement("div");
-
-        while (this.mainBuffer.length > 0) {
-            const announcement = document.createElement("p");
-            announcement.textContent = this.mainBuffer.shift();
-            packet.appendChild(announcement);
+        if (!this.fusionDiv) {
+            this.fusionDiv = document.createElement("div");
         }
 
-        this.getDiv().appendChild(packet);
+        if (!this.announcementPacket) {
+            this.announcementPacket = document.createElement("div");
+            this.announcementPacket.className = "sr-only";
+            this.fusionDiv.appendChild(this.announcementPacket);
+        }
+
+        let armedSound = undefined;
+
+        while (this.mainBuffer.length > 0) {
+            const message = this.mainBuffer.shift();
+            if (message.type === ANNOUNCEMENT_TYPE_TEXT) {
+                const announcement = document.createElement("p");
+                announcement.textContent = message.content;
+                this.announcementPacket.appendChild(announcement);
+            }
+            else if (message.type === ANNOUNCEMENT_TYPE_AUDIO) {
+                armedSound = message.content;
+                break;
+            }
+        }
+
+        if (this.mainBuffer.length === 0) {
+            while (this.nextReportPacket.length > 0) {
+                const next = this.nextReportPacket.shift();
+                this.fusionDiv.appendChild(next);
+                this.reportPacket.push(next);
+            }
+            this.getDiv().appendChild(this.fusionDiv);
+        }
+
+        var lockDelay = IF_OCTANE_LIVE_REGION_LOCK_DELAY;
+
+        if (armedSound) {
+            //TODO: if armedSound has content, play it.
+            // lockDelay will be the duration of the sound in milliseconds.
+            // lockDelay also cannot be longer than 3 seconds.
+        }
 
         const _this = this;
-        setTimeout(() => { _this.endDump(); }, IF_OCTANE_LIVE_REGION_LOCK_DELAY);
+        setTimeout(() => { _this.endDump(); }, lockDelay);
     }
 
     endDump() {
         // Make sure there are no stragglers
-        if (this.secondaryBuffer.length === 0) {
+        if (this.mainBuffer.length > 0) {
+            this.iterateDump();
+            return;
+        }
+        if (this.secondaryBuffer.length === 0 && this.nextReportPacket.length === 0) {
             this.isLocked = false;
             return;
         }
@@ -81,6 +162,7 @@ class LiveRegionManager {
             this.mainBuffer.push(this.secondaryBuffer.shift());
         }
 
+        this.clearDiv();
         this.iterateDump();
     }
 }
@@ -113,6 +195,7 @@ function if_octane_get_last_paragraph() {
     if (lastEl === null) {
         const newPar = document.createElement('p');
         if_octane_get_output_element().appendChild(newPar);
+        if_octane_paragraphs_count++;
         return newPar;
     }
 
@@ -140,6 +223,7 @@ function sayLiteral(str) {
                     chunk.parseAction,
                     chunk.clickOnce
                 );
+                if_octane_inline_action_count++;
             }
             else if (
                 chunk.isBold ||
@@ -171,6 +255,7 @@ function sayLiteral(str) {
         if (i < strStruct.length - 1 && strStruct.length > 1) {
             paragraphEl = document.createElement('p');
             outputEl.appendChild(paragraphEl);
+            if_octane_paragraphs_count++;
         }
     }
 }
@@ -287,7 +372,7 @@ function if_octane_spend_button(buttonElement, isSpent=false) {
     buttonElement.setAttribute("aria-disabled", "true");
     if (isSpent) {
         // Announce to screen readers that the button has been disabled.
-        announcementManager.addMessage("Push button is now spent and grayed.");
+        announcementManager.addMessage("Button is now spent and grayed.");
     }
 }
 
@@ -319,11 +404,9 @@ function if_octane_get_truncated_turn_header(action) {
 }
 
 function if_octane_separate_turn_text(action) {
-    const spacer = document.getElementById("bottom-page-spacer");
-    const parent = spacer.parentElement;
     const newTranscript = document.createElement("div");
     newTranscript.className = "transcript-div";
-    parent.insertBefore(newTranscript, spacer);
+    document.getElementById("transcript-queue").appendChild(newTranscript);
     if_octane_output_element = newTranscript;
 
     const newHeader = document.createElement("h2");
@@ -331,10 +414,11 @@ function if_octane_separate_turn_text(action) {
     newTranscript.appendChild(newHeader);
 
     const gotoLink = document.createElement("a");
-    gotoLink.innerText = "Jump to latest";
+    gotoLink.innerText = "Jump to latest content";
     gotoLink.className = "latest-link";
     gotoLink.href = "#" + IF_OCTANE_LATEST_REPORT_ID;
     newTranscript.appendChild(gotoLink);
+    //TODO: Do not show this link on the latest
 
     // Set the latest section element to not be the latest anymore
     if (if_octane_report_sections.length > 0) {
@@ -349,26 +433,82 @@ function if_octane_separate_turn_text(action) {
         transcriptDiv: newTranscript
     });
 
-    if_octane_announce_turn_addition();
+    announcementManager.assignTranscript(newTranscript);
+
+    // Reset new turn report announcements
+    if_octane_paragraphs_count = 0;
+    if_octane_inline_action_count = 0;
+    if_octane_grouped_action_count = 0;
 }
 
-var if_octane_has_explained_scrolling = false;
-
-function if_octane_announce_turn_addition() {
-    // Let screen readers know that new content is available
-    announcementManager.addMessage(
-        "New text has been written below."
-    );
-
-    if (!if_octane_has_explained_scrolling) {
-        if_octane_has_explained_scrolling = true;
-        announcementManager.addMessage(
-            "You can continue reading from here, or "+
-            "jump to the next heading level 2."
-        );
-    }
-}
+//var if_octane_has_explained_scrolling = false;
 
 function if_octane_end_new_turn() {
+    if (if_octane_paragraphs_count >= 2) {
+        if_octane_paragraphs_count--; // Tends to over-count
+    }
+
+    // Read out turns stats
+    const stats = [];
+    if (if_octane_paragraphs_count > 0) {
+        stats.push({
+            singular: 'paragraph',
+            plural: 'paragraphs',
+            count: if_octane_paragraphs_count
+        });
+    }
+    if (if_octane_inline_action_count > 0) {
+        stats.push({
+            singular: 'button in text',
+            plural: 'buttons in text',
+            count: if_octane_inline_action_count
+        });
+    }
+    if (if_octane_grouped_action_count > 0) {
+        stats.push({
+            singular: 'button at the bottom',
+            plural: 'buttons at the bottom',
+            count: if_octane_grouped_action_count
+        });
+    }
+
+    const readStat = function(stat) {
+        return String(stat.count) + ' ' + (
+            stat.count === 1 ? stat.singular : stat.plural
+        );
+    }
+
+    announcementManager.addMessage(
+        "New content has been written below."
+    );
+
+    //TODO: Create a generic lister
+    if (stats.length === 1) {
+        announcementManager.addMessage(
+            readStat(stats[0]) + "."
+        );
+    }
+    else if (stats.length === 2) {
+        announcementManager.addMessage(
+            readStat(stats[0]) + ", and " + readStat(stats[1]) + "."
+        );
+    }
+    else if (stats.length === 3) {
+        announcementManager.addMessage(
+            readStat(stats[0]) + ", " + readStat(stats[1]) +
+            ", and " + readStat(stats[2]) + "."
+        );
+    }
+
+    /*if (!if_octane_has_explained_scrolling) {
+        if_octane_has_explained_scrolling = true;
+        announcementManager.addMessage(
+            "After choosing an action, "+
+            "you can always continue reading from here, or "+
+            "jump to the next heading level 2."
+        );
+    }*/
+
+    // Start the announcements
     announcementManager.startDump();
 }
