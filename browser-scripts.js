@@ -127,6 +127,7 @@ class LiveRegionManager {
         }
 
         if (this.mainBuffer.length === 0) {
+            //FIXME: Why is Chrome using a different order???
             while (this.nextReportPacket.length > 0) {
                 const next = this.nextReportPacket.shift();
                 this.fusionDiv.appendChild(next);
@@ -369,6 +370,9 @@ function if_octane_create_inline_button(str, tooltip, func, clickOnce=false) {
 }
 
 function if_octane_spend_button(buttonElement, isSpent=false) {
+    // Always clear the live region before applying changes
+    announcementManager.clearDiv();
+
     buttonElement.setAttribute("aria-disabled", "true");
     if (isSpent) {
         // Announce to screen readers that the button has been disabled.
