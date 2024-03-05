@@ -92,9 +92,7 @@ class LiveRegionManager {
         while (this.mainBuffer.length > 0) {
             const message = this.mainBuffer.shift();
             if (message.type === ANNOUNCEMENT_TYPE_TEXT) {
-                const announcement = document.createElement("p");
-                announcement.textContent = message.content;
-                this.announcementPacket.appendChild(announcement);
+                this.announcementPacket.textContent += (' ' + message.content);
             }
             else if (message.type === ANNOUNCEMENT_TYPE_AUDIO) {
                 armedSound = message.content;
@@ -149,6 +147,11 @@ function if_octane_get_output_element() {
     return if_octane_output_element;
 }
 
+function if_octane_create_paragraph() {
+    const para = document.createElement('p');
+    return para;
+}
+
 function if_octane_check_create_new_paragraph() {
     if (if_octane_force_new_paragraph) {
         if_octane_force_new_paragraph = false;
@@ -164,13 +167,25 @@ function if_octane_check_create_new_paragraph() {
 function if_octane_get_last_paragraph() {
     const lastEl = if_octane_check_create_new_paragraph();
     if (lastEl === null) {
-        const newPar = document.createElement('p');
+        const newPar = if_octane_create_paragraph();
         if_octane_get_output_element().appendChild(newPar);
         if_octane_paragraphs_count++;
         return newPar;
     }
 
     return lastEl;
+}
+
+function if_octane_fuse_text_to(str, el) {
+    // Check to concat to text node
+    const lastNode = el.lastChild;
+    if (lastNode != null && lastNode.nodeType === Node.TEXT_NODE) {
+        lastNode.textContent += str;
+        return;
+    }
+
+    // Add text node
+    el.append(str);
 }
 
 function sayLiteral(str) {
@@ -212,18 +227,24 @@ function sayLiteral(str) {
 
                 if (chunk.isItalic) stackInfo.addToStack('em');
                 if (chunk.isStrikethrough) stackInfo.addToStack('s');
-                if (chunk.isBold) stackInfo.addToStack('b');
+                if (chunk.isBold) stackInfo.addToStack('strong');
                 if (chunk.isUnderline) stackInfo.addToStack('u');
 
-                stackInfo.lastElement.appendChild(document.createTextNode(chunk.content));
+                if_octane_fuse_text_to(
+                    chunk.content,
+                    stackInfo.lastElement
+                );
             }
             else {
-                paragraphEl.appendChild(document.createTextNode(chunk.content));
+                if_octane_fuse_text_to(
+                    chunk.content,
+                    paragraphEl
+                );
             }
         }
 
         if (i < strStruct.length - 1 && strStruct.length > 1) {
-            paragraphEl = document.createElement('p');
+            paragraphEl = if_octane_create_paragraph();
             outputEl.appendChild(paragraphEl);
             if_octane_paragraphs_count++;
         }
@@ -247,10 +268,16 @@ function if_octane_process_say_title(str, level) {
             const chunk = chunks[j];
             
             if (chunk.isBreak) {
-                title.appendChild(document.createTextNode(' '));
+                if_octane_fuse_text_to(
+                    ' ',
+                    title
+                );
             }
             else if (chunk.isButton) {
-                title.appendChild(document.createTextNode(chunk.phrase));
+                if_octane_fuse_text_to(
+                    chunk.phrase,
+                    title
+                );
             }
             else if (
                 chunk.isItalic ||
@@ -270,15 +297,24 @@ function if_octane_process_say_title(str, level) {
                 if (chunk.isStrikethrough) stackInfo.addToStack('s');
                 if (chunk.isUnderline) stackInfo.addToStack('u');
 
-                stackInfo.lastElement.appendChild(document.createTextNode(chunk.content));
+                if_octane_fuse_text_to(
+                    chunk.content,
+                    stackInfo.lastElement
+                );
             }
             else {
-                title.appendChild(document.createTextNode(chunk.content));
+                if_octane_fuse_text_to(
+                    chunk.content,
+                    title
+                );
             }
         }
 
         if (i < strStruct.length - 1 && strStruct.length > 1) {
-            title.appendChild(document.createTextNode(' '));
+            if_octane_fuse_text_to(
+                ' ',
+                title
+            );
         }
     }
 }
@@ -290,22 +326,22 @@ function printCredits() {
     outputEl.appendChild(title);
     title.appendChild(document.createTextNode(GAME_INFO.title));
     
-    const byline = document.createElement('p');
+    const byline = if_octane_create_paragraph();
     byline.className = "author-info";
     outputEl.appendChild(byline);
     byline.appendChild(document.createTextNode('by ' + GAME_INFO.author));
     
-    const blurb = document.createElement('p');
+    const blurb = if_octane_create_paragraph();
     blurb.className = "blurb-info";
     outputEl.appendChild(blurb);
     blurb.appendChild(document.createTextNode(GAME_INFO.blurb));
     
-    const tiny_info0 = document.createElement('p');
+    const tiny_info0 = if_octane_create_paragraph();
     tiny_info0.className = "tiny-info";
     outputEl.appendChild(tiny_info0);
     tiny_info0.appendChild(document.createTextNode('IFID: ' + GAME_INFO.ifid));
     
-    const tiny_info1 = document.createElement('p');
+    const tiny_info1 = if_octane_create_paragraph();
     tiny_info1.className = "tiny-info";
     outputEl.appendChild(tiny_info1);
     tiny_info1.appendChild(document.createTextNode('version ' + GAME_INFO.version));
@@ -317,20 +353,26 @@ function if_octane_create_inline_button(str, tooltip, func, clickOnce=false) {
     const paragraphEl = if_octane_get_last_paragraph();
 
     const button = document.createElement('button');
+    if_octane_fuse_text_to(
+        str,
+        paragraphEl
+    );
     paragraphEl.appendChild(button);
-    button.textContent = str;
+    button.textContent = clickOnce ? "\u25B6" : "\u21BB";
+    button.setAttribute("aria-label", clickOnce ? "single use" : "repeatable");
     button.title = tooltip;
     button.isClickOnce = clickOnce;
     button.className = 'action-button';
     button.hasBeenPressed = false;
     button.addEventListener("click", function (e) {
         const _button = e.target;
+        const phrase = _button.title;
         if (_button.isClickOnce) {
             if (_button.hasBeenPressed) return;
             if_octane_spend_button(_button, true);
         }
         _button.hasBeenPressed = true;
-        if_octane_start_new_turn(_button.title);
+        if_octane_start_new_turn(phrase);
         func();
         if_octane_end_new_turn();
     });
@@ -339,9 +381,10 @@ function if_octane_create_inline_button(str, tooltip, func, clickOnce=false) {
 
 function if_octane_spend_button(buttonElement, isSpent=false) {
     buttonElement.setAttribute("aria-disabled", "true");
+    buttonElement.title = "spent";
     if (isSpent) {
         // Announce to screen readers that the button has been disabled.
-        announcementManager.addMessage("Button is now spent and grayed.");
+        announcementManager.addMessage("Action button has been spent.");
     }
 }
 
@@ -426,15 +469,15 @@ function if_octane_end_new_turn() {
     }
     if (if_octane_inline_action_count > 0) {
         stats.push({
-            singular: 'button in text',
-            plural: 'buttons in text',
+            singular: 'action control in text',
+            plural: 'action controls in text',
             count: if_octane_inline_action_count
         });
     }
     if (if_octane_grouped_action_count > 0) {
         stats.push({
-            singular: 'button at the bottom',
-            plural: 'buttons at the bottom',
+            singular: 'action control at bottom',
+            plural: 'action controls at bottom',
             count: if_octane_grouped_action_count
         });
     }

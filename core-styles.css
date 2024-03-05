@@ -2,7 +2,7 @@
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
 }
 
-.action-button, p, h2, h3 {
+p, h2, h3 {
     font-size: 12pt;
 }
 
@@ -154,21 +154,20 @@ h2 {
 
 .action-button {
     background: none!important;
-    border: none;
-    padding: 0!important;
+    /*border: none;*/
+    border-width: 1px;
+    border-radius: 4px;
     color: #006688;
-    text-decoration: underline;
-    font-weight: bold;
+    font-weight: 900;
     cursor: pointer;
-    /* Breaks Firefox screen reader interface */
-    /*user-select: text;
-    -webkit-user-select: text;*/
+    margin-left: 0.5em;
+    margin-right: 0.5em;
 }
 
 .action-button:disabled,
 .action-button[disabled],
 .action-button[aria-disabled=true] {
-    color: #404244;
+    color: #C2C1C0;
     text-decoration: none;
 }
 
@@ -238,7 +237,7 @@ a:active {
     .action-button:disabled,
     .action-button[disabled],
     .action-button[aria-disabled=true] {
-        color: #808284;
+        color: #202122;
     }
 
     #game-container {

@@ -183,6 +183,27 @@ const IF_OCTANE_CAP_CHANGE_UP = 1;
 const IF_OCTANE_CAP_CHANGE_DOWN = 2;
 var if_octane_cap_change_status = IF_OCTANE_NO_CAP_CHANGE;
 
+var if_octane_quote_depth = 0;
+
+function if_octane_create_empty_chunk(lastChunk) {
+    if (!lastChunk) {
+        return {
+            isBold: false,
+            isItalic: false,
+            isUnderline: false,
+            isStrikethrough: false,
+            content: ''
+        };
+    }
+    return {
+        isBold: lastChunk.isBold,
+        isItalic: lastChunk.isItalic,
+        isUnderline: lastChunk.isUnderline,
+        isStrikethrough: lastChunk.isStrikethrough,
+        content: ''
+    };
+}
+
 function if_octane_process_say_string(str) {
     str = str.replace(/\.\.\./g, "\u2026");
     if (!str) return if_octane_process_say_string('<br>');
@@ -220,13 +241,7 @@ function if_octane_process_say_string(str) {
     // Create paragraph-chunk structure
     let paragraph = {
         chunks: [
-            {
-                isBold: false,
-                isItalic: false,
-                isUnderline: false,
-                isStrikethrough: false,
-                content: ''
-            }
+            if_octane_create_empty_chunk()
         ]
     };
     const paragraphs = [paragraph];
@@ -275,6 +290,9 @@ function if_octane_process_say_string(str) {
         else if (c === '>') {
             const lowerTag = tagContent.toLowerCase();
             inTag = false;
+
+            let tagContentConversion = undefined;
+
             if (!closingTag) {
                 if (lowerTag === '.p') {
                     if (if_octane_paragraph_break_status < IF_OCTANE_CANCEL_PARAGRAPH_BREAK) {
@@ -295,13 +313,7 @@ function if_octane_process_say_string(str) {
                 }
             }
 
-            const newChunk = {
-                isBold: lastChunk.isBold,
-                isItalic: lastChunk.isItalic,
-                isUnderline: lastChunk.isUnderline,
-                isStrikethrough: lastChunk.isStrikethrough,
-                content: ''
-            };
+            const newChunk = if_octane_create_empty_chunk(lastChunk);
 
             if (lowerTag === 'b' || lowerTag === 'strong') newChunk.isBold = !closingTag;
             if (lowerTag === 'i' || lowerTag === 'em') newChunk.isItalic = !closingTag;
@@ -313,6 +325,26 @@ function if_octane_process_say_string(str) {
                     isSpecial: true,
                     isBreak: true
                 };
+            }
+
+            if (lowerTag === 'q') {
+                if (!closingTag) {
+                    if (if_octane_quote_depth % 2 === 0) {
+                        tagContentConversion = '\u201C';
+                    }
+                    else {
+                        tagContentConversion = '\u2018';
+                    }
+                }
+                if_octane_quote_depth += (closingTag ? -1 : 1);
+                if (closingTag) {
+                    if (if_octane_quote_depth % 2 === 0) {
+                        tagContentConversion = '\u201D';
+                    }
+                    else {
+                        tagContentConversion = '\u2019';
+                    }
+                }
             }
             
             if (!closingTag) {
@@ -377,7 +409,11 @@ function if_octane_process_say_string(str) {
 
             closingTag = false;
 
-            if (pushableChunk) {
+            if (tagContentConversion) {
+                c = tagContentConversion;
+                if_octane_mark_output_listener();
+            }
+            else if (pushableChunk) {
                 if_octane_mark_output_listener();
             }
             else {
@@ -401,13 +437,7 @@ function if_octane_process_say_string(str) {
             (pushableChunk && pushableChunk.isBreak);
 
         if (!isSpace && if_octane_paragraph_break_status % 2 === 1) {
-            const newChunk = {
-                isBold: lastChunk.isBold,
-                isItalic: lastChunk.isItalic,
-                isUnderline: lastChunk.isUnderline,
-                isStrikethrough: lastChunk.isStrikethrough,
-                content: ''
-            };
+            const newChunk = if_octane_create_empty_chunk(lastChunk);
             paragraph = {
                 chunks: [newChunk]
             };
@@ -424,13 +454,7 @@ function if_octane_process_say_string(str) {
         }
 
         if (pushableChunk) {
-            const newChunk = {
-                isBold: lastChunk.isBold,
-                isItalic: lastChunk.isItalic,
-                isUnderline: lastChunk.isUnderline,
-                isStrikethrough: lastChunk.isStrikethrough,
-                content: ''
-            };
+            const newChunk = if_octane_create_empty_chunk(lastChunk);
             paragraph.chunks.push(pushableChunk);
             paragraph.chunks.push(newChunk);
         }
