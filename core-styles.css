@@ -114,13 +114,7 @@ body {
     min-height: 20vh;
 }
 
-/*#sr-announcements*/ h1,
-/*#sr-announcements*/ h2,
-/*#sr-announcements*/ h3,
-/*#sr-announcements*/ .author-info,
-/*#sr-announcements*/ .blurb-info,
-/*#sr-announcements*/ .tiny-info,
-/*#sr-announcements*/ .latest-link {
+h1, h2, h3, .author-info, .blurb-info, .tiny-info, .latest-link {
     animation: fadeIn 0.25s;
 }
 

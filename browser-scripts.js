@@ -22,13 +22,7 @@ class LiveRegionManager {
         this.isLocked = false;
         this.fusionDiv = undefined;
         this.announcementPacket = undefined;
-        /*this.reportPacket = [];
-        this.nextReportPacket = [];*/
     }
-
-    /*assignTranscript(transcriptDiv) {
-        this.nextReportPacket.push(transcriptDiv);
-    }*/
 
     getDiv() {
         if (!this.div) {
@@ -45,34 +39,10 @@ class LiveRegionManager {
     }
 
     clearDiv() {
-        // ANNOUNCEMENT-ONLY
         if (!this.announcementPacket) return;
 
         this.announcementPacket.remove();
         this.announcementPacket = undefined;
-
-        /*
-        // LIVE REPORT VERSION
-        if (!this.fusionDiv) return;
-
-        // Move out the fusion div
-        this.shiftContent(this.fusionDiv);
-
-        // Delete the announcement packet
-        if (this.announcementPacket) {
-            this.announcementPacket.remove();
-            this.announcementPacket = undefined;
-        }
-
-        // Move report out
-        while (this.reportPacket.length > 0) {
-            this.shiftContent(this.reportPacket.shift());
-        }
-
-        // Delete the fusion div
-        this.fusionDiv.remove();
-        this.fusionDiv = undefined;
-        */
     }
 
     addMessage(str, msgType=ANNOUNCEMENT_TYPE_TEXT) {
@@ -113,14 +83,8 @@ class LiveRegionManager {
             return;
         }
 
-        /*if (!this.fusionDiv) {
-            this.fusionDiv = document.createElement("div");
-        }*/
-
         if (!this.announcementPacket) {
             this.announcementPacket = document.createElement("div");
-            //this.announcementPacket.className = "sr-only";
-            //this.fusionDiv.appendChild(this.announcementPacket);
         }
 
         let armedSound = undefined;
@@ -139,12 +103,6 @@ class LiveRegionManager {
         }
 
         if (this.mainBuffer.length === 0) {
-            /*while (this.nextReportPacket.length > 0) {
-                const next = this.nextReportPacket.shift();
-                this.fusionDiv.appendChild(next);
-                this.reportPacket.push(next);
-            }
-            this.getDiv().appendChild(this.fusionDiv);*/
             this.getDiv().appendChild(this.announcementPacket);
         }
 
@@ -166,7 +124,7 @@ class LiveRegionManager {
             this.iterateDump();
             return;
         }
-        if (this.secondaryBuffer.length === 0 /*&& this.nextReportPacket.length === 0*/) {
+        if (this.secondaryBuffer.length === 0) {
             this.isLocked = false;
             return;
         }
@@ -380,9 +338,6 @@ function if_octane_create_inline_button(str, tooltip, func, clickOnce=false) {
 }
 
 function if_octane_spend_button(buttonElement, isSpent=false) {
-    // Always clear the live region before applying changes (OLD!)
-    //announcementManager.clearDiv();
-
     buttonElement.setAttribute("aria-disabled", "true");
     if (isSpent) {
         // Announce to screen readers that the button has been disabled.
@@ -420,7 +375,6 @@ function if_octane_get_truncated_turn_header(action) {
 function if_octane_separate_turn_text(action) {
     const newTranscript = document.createElement("div");
     newTranscript.className = "transcript-div";
-    //document.getElementById("transcript-queue").appendChild(newTranscript);
     const spacer = document.getElementById("bottom-page-spacer");
     const parent = spacer.parentElement;
     parent.insertBefore(newTranscript, spacer);
@@ -451,8 +405,6 @@ function if_octane_separate_turn_text(action) {
         gotoLink: gotoLink,
         transcriptDiv: newTranscript
     });
-
-    //announcementManager.assignTranscript(newTranscript);
 
     // Reset new turn report announcements
     if_octane_paragraphs_count = 0;
