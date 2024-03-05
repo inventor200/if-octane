@@ -114,13 +114,13 @@ body {
     min-height: 20vh;
 }
 
-#sr-announcements h1,
-#sr-announcements h2,
-#sr-announcements h3,
-#sr-announcements .author-info,
-#sr-announcements .blurb-info,
-#sr-announcements .tiny-info,
-#sr-announcements .latest-link {
+/*#sr-announcements*/ h1,
+/*#sr-announcements*/ h2,
+/*#sr-announcements*/ h3,
+/*#sr-announcements*/ .author-info,
+/*#sr-announcements*/ .blurb-info,
+/*#sr-announcements*/ .tiny-info,
+/*#sr-announcements*/ .latest-link {
     animation: fadeIn 0.25s;
 }
 
@@ -166,6 +166,9 @@ h2 {
     text-decoration: underline;
     font-weight: bold;
     cursor: pointer;
+    /* Breaks Firefox screen reader interface */
+    /*user-select: text;
+    -webkit-user-select: text;*/
 }
 
 .action-button:disabled,
@@ -192,6 +195,9 @@ a:active {
     width: 1px;
     height: 1px;
     overflow: hidden;
+    /* Breaks Firefox screen reader interface */
+    /*user-select: none;
+    -webkit-user-select: none;*/
 }
 
 @media (prefers-color-scheme: dark) {

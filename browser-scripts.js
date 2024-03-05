@@ -22,13 +22,13 @@ class LiveRegionManager {
         this.isLocked = false;
         this.fusionDiv = undefined;
         this.announcementPacket = undefined;
-        this.reportPacket = [];
-        this.nextReportPacket = [];
+        /*this.reportPacket = [];
+        this.nextReportPacket = [];*/
     }
 
-    assignTranscript(transcriptDiv) {
+    /*assignTranscript(transcriptDiv) {
         this.nextReportPacket.push(transcriptDiv);
-    }
+    }*/
 
     getDiv() {
         if (!this.div) {
@@ -45,6 +45,14 @@ class LiveRegionManager {
     }
 
     clearDiv() {
+        // ANNOUNCEMENT-ONLY
+        if (!this.announcementPacket) return;
+
+        this.announcementPacket.remove();
+        this.announcementPacket = undefined;
+
+        /*
+        // LIVE REPORT VERSION
         if (!this.fusionDiv) return;
 
         // Move out the fusion div
@@ -64,6 +72,7 @@ class LiveRegionManager {
         // Delete the fusion div
         this.fusionDiv.remove();
         this.fusionDiv = undefined;
+        */
     }
 
     addMessage(str, msgType=ANNOUNCEMENT_TYPE_TEXT) {
@@ -99,16 +108,19 @@ class LiveRegionManager {
     }
 
     iterateDump() {
-        if (this.mainBuffer.length === 0) return;
-
-        if (!this.fusionDiv) {
-            this.fusionDiv = document.createElement("div");
+        if (this.mainBuffer.length === 0) {
+            this.endDump();
+            return;
         }
+
+        /*if (!this.fusionDiv) {
+            this.fusionDiv = document.createElement("div");
+        }*/
 
         if (!this.announcementPacket) {
             this.announcementPacket = document.createElement("div");
-            this.announcementPacket.className = "sr-only";
-            this.fusionDiv.appendChild(this.announcementPacket);
+            //this.announcementPacket.className = "sr-only";
+            //this.fusionDiv.appendChild(this.announcementPacket);
         }
 
         let armedSound = undefined;
@@ -127,13 +139,13 @@ class LiveRegionManager {
         }
 
         if (this.mainBuffer.length === 0) {
-            //FIXME: Why is Chrome using a different order???
-            while (this.nextReportPacket.length > 0) {
+            /*while (this.nextReportPacket.length > 0) {
                 const next = this.nextReportPacket.shift();
                 this.fusionDiv.appendChild(next);
                 this.reportPacket.push(next);
             }
-            this.getDiv().appendChild(this.fusionDiv);
+            this.getDiv().appendChild(this.fusionDiv);*/
+            this.getDiv().appendChild(this.announcementPacket);
         }
 
         var lockDelay = IF_OCTANE_LIVE_REGION_LOCK_DELAY;
@@ -154,7 +166,7 @@ class LiveRegionManager {
             this.iterateDump();
             return;
         }
-        if (this.secondaryBuffer.length === 0 && this.nextReportPacket.length === 0) {
+        if (this.secondaryBuffer.length === 0 /*&& this.nextReportPacket.length === 0*/) {
             this.isLocked = false;
             return;
         }
@@ -212,7 +224,6 @@ function sayLiteral(str) {
         const chunks = strStruct[i].chunks;
         for (let j = 0; j < chunks.length; j++) {
             const chunk = chunks[j];
-            if (!chunk.isSpecial && chunk.content.length === 0) continue;
             
             if (chunk.isBreak) {
                 paragraphEl.appendChild(document.createElement('br'));
@@ -276,7 +287,6 @@ function if_octane_process_say_title(str, level) {
         const chunks = strStruct[i].chunks;
         for (let j = 0; j < chunks.length; j++) {
             const chunk = chunks[j];
-            if (!chunk.isSpecial && chunk.content.length === 0) continue;
             
             if (chunk.isBreak) {
                 title.appendChild(document.createTextNode(' '));
@@ -370,8 +380,8 @@ function if_octane_create_inline_button(str, tooltip, func, clickOnce=false) {
 }
 
 function if_octane_spend_button(buttonElement, isSpent=false) {
-    // Always clear the live region before applying changes
-    announcementManager.clearDiv();
+    // Always clear the live region before applying changes (OLD!)
+    //announcementManager.clearDiv();
 
     buttonElement.setAttribute("aria-disabled", "true");
     if (isSpent) {
@@ -410,7 +420,10 @@ function if_octane_get_truncated_turn_header(action) {
 function if_octane_separate_turn_text(action) {
     const newTranscript = document.createElement("div");
     newTranscript.className = "transcript-div";
-    document.getElementById("transcript-queue").appendChild(newTranscript);
+    //document.getElementById("transcript-queue").appendChild(newTranscript);
+    const spacer = document.getElementById("bottom-page-spacer");
+    const parent = spacer.parentElement;
+    parent.insertBefore(newTranscript, spacer);
     if_octane_output_element = newTranscript;
 
     const newHeader = document.createElement("h2");
@@ -439,7 +452,7 @@ function if_octane_separate_turn_text(action) {
         transcriptDiv: newTranscript
     });
 
-    announcementManager.assignTranscript(newTranscript);
+    //announcementManager.assignTranscript(newTranscript);
 
     // Reset new turn report announcements
     if_octane_paragraphs_count = 0;
@@ -447,13 +460,9 @@ function if_octane_separate_turn_text(action) {
     if_octane_grouped_action_count = 0;
 }
 
-//var if_octane_has_explained_scrolling = false;
+var if_octane_has_explained_scrolling = false;
 
 function if_octane_end_new_turn() {
-    if (if_octane_paragraphs_count >= 2) {
-        if_octane_paragraphs_count--; // Tends to over-count
-    }
-
     // Read out turns stats
     const stats = [];
     if (if_octane_paragraphs_count > 0) {
@@ -506,14 +515,14 @@ function if_octane_end_new_turn() {
         );
     }
 
-    /*if (!if_octane_has_explained_scrolling) {
+    if (!if_octane_has_explained_scrolling) {
         if_octane_has_explained_scrolling = true;
         announcementManager.addMessage(
             "After choosing an action, "+
             "you can always continue reading from here, or "+
             "jump to the next heading level 2."
         );
-    }*/
+    }
 
     // Start the announcements
     announcementManager.startDump();

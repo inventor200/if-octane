@@ -35,6 +35,8 @@ function if_octane_get_function_id(funcID) {
 }
 
 // Other handy stuff
+var if_octane_say_follows_heading = false;
+
 function isWhitespace(ch) {
     if (ch.length > 1) return false;
     return ' \f\n\r\t\v\u00A0\u2028\u2029'.indexOf(ch) > -1;
@@ -448,18 +450,43 @@ function if_octane_process_say_string(str) {
         throw new Error("Incomplete tag!");
     }
 
+    // Clean out empties
+    let firstSearchParagraph = 1;
+    if (if_octane_say_follows_heading) {
+        firstSearchParagraph = 0;
+        if_octane_say_follows_heading = false;
+    }
+
+    for (let i = firstSearchParagraph; i < paragraphs.length; i++) {
+        const tchunks = paragraphs[i].chunks;
+        for (let j = 0; j < tchunks.length; j++) {
+            const chunk = tchunks[j];
+            if (!chunk.isSpecial && chunk.content.length === 0) {
+                tchunks.splice(j, 1);
+                j--;
+            }
+        }
+        if (tchunks.length === 0) {
+            paragraphs.splice(i, 1);
+            i--;
+        }
+    }
+
     return paragraphs;
 }
 
 function if_octane_say_title(str) {
     if_octane_process_say_title(str, 1);
+    if_octane_say_follows_heading = true;
 }
 
 function if_octane_say_room(str) {
     if_octane_process_say_title(str, 3);
+    if_octane_say_follows_heading = true;
 }
 
 function if_octane_start_new_turn(action) {
     if_octane_turn_counter++;
     if_octane_separate_turn_text(action);
+    if_octane_say_follows_heading = true;
 }

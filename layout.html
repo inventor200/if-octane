@@ -1,3 +1,7 @@
+<!-- Skipping role="status" to avoid this bug: -->
+<!-- https://bugzilla.mozilla.org/show_bug.cgi?id=1810596 -->
+<div id="sr-announcements" class="sr-only"
+aria-live="polite" aria-atomic="false" aria-relevant="additions"></div>
 <div id="background-container" aria-hidden="true">
     <div id="background-left"></div>
     <div id="background-right"></div>
@@ -5,10 +9,6 @@
 </div>
 <main id="game-container">
     <div class="transcript-div" id="init-transcript-area"></div>
-    <!-- Skipping role="status" to avoid this bug: -->
-    <!-- https://bugzilla.mozilla.org/show_bug.cgi?id=1810596 -->
-    <div id="sr-announcements"
-    aria-live="polite" aria-atomic="false" aria-relevant="additions"></div>
-    <div id="transcript-queue" style="display: none;"></div>
+    <!--<div id="transcript-queue" style="display: none;"></div>-->
     <div class="transcript-div" id="bottom-page-spacer"></div>
 </main>
