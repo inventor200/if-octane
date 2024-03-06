@@ -349,47 +349,30 @@ function if_octane_process_say_string(str) {
             
             if (!closingTag) {
                 /*
-                <# phrase/title/action>
-                <# phrase | title > (uses armed function from list)
-                <# phrase | title | action >
-                <# phrase | title | * > (title as action)
+                <# title/action>
+                <# title > (title as action)
+                <# title | action >
+                <# title | * > (uses armed function from list)
                 <! ... > (click only once)
                 */
-                if (lowerTag.startsWith('#') || lowerTag.startsWith('!')) {
+                if (
+                    lowerTag.startsWith('#') ||
+                    lowerTag.startsWith('!')
+                ) {
                     const content = tagContent.substring(1);
                     const parts = content.split('|');
                     const clickOnce = tagContent.startsWith('!');
                     
-                    let phrase = parts[0].trim();
-                    let title;
+                    let title = parts[0].trim().toLowerCase();
                     let parseAction;
 
-                    let firstLetter = phrase.substring(0, 1);
-                    let remainder = phrase.substring(1);
-                    if (if_octane_cap_change_status === IF_OCTANE_CAP_CHANGE_UP) {
-                        firstLetter = firstLetter.toUpperCase();
-                        if_octane_cap_change_status = IF_OCTANE_NO_CAP_CHANGE;
-                        phrase = firstLetter + remainder;
-                    }
-                    if (if_octane_cap_change_status === IF_OCTANE_CAP_CHANGE_DOWN) {
-                        firstLetter = firstLetter.toLowerCase();
-                        if_octane_cap_change_status = IF_OCTANE_NO_CAP_CHANGE;
-                        phrase = firstLetter + remainder;
-                    }
-
                     if (parts.length === 1) {
-                        title = parts[0].trim();
-                        parseAction = createParseAction(title);
-                    }
-                    else if (parts.length === 2) {
-                        title = parts[1].trim();
-                        parseAction = if_octane_button_function_queue.shift();
+                        parseAction = createParseAction(title.toLowerCase());
                     }
                     else {
-                        title = parts[1].trim();
-                        const potentialAction = parts[2].trim();
+                        const potentialAction = parts[1].trim().toLowerCase();
                         if (potentialAction === "*") {
-                            parseAction = title;
+                            parseAction = if_octane_button_function_queue.shift();
                         }
                         else {
                             parseAction = createParseAction(potentialAction);
@@ -399,7 +382,6 @@ function if_octane_process_say_string(str) {
                     pushableChunk = {
                         isSpecial: true,
                         isButton: true,
-                        phrase: phrase,
                         title: title,
                         parseAction: parseAction,
                         clickOnce: clickOnce

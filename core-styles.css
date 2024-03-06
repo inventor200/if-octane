@@ -154,21 +154,26 @@ h2 {
 
 .action-button {
     background: none!important;
-    /*border: none;*/
     border-width: 1px;
     border-radius: 4px;
     color: #006688;
     font-weight: 900;
-    cursor: pointer;
-    margin-left: 0.5em;
-    margin-right: 0.5em;
+    /*margin-left: 0.5em;
+    margin-right: 0.5em;*/
 }
 
 .action-button:disabled,
 .action-button[disabled],
 .action-button[aria-disabled=true] {
     color: #C2C1C0;
-    text-decoration: none;
+}
+
+.action-button:hover {
+    color: #660088;
+}
+
+.action-button:active {
+    color: black;
 }
 
 a:link, a:hover, a.latest-link:visited {
@@ -238,6 +243,14 @@ a:active {
     .action-button[disabled],
     .action-button[aria-disabled=true] {
         color: #202122;
+    }
+
+    .action-button:hover {
+        color: #AA00FF;
+    }
+    
+    .action-button:active {
+        color: white;
     }
 
     #game-container {

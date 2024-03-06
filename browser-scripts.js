@@ -203,7 +203,6 @@ function sayLiteral(str) {
             }
             else if (chunk.isButton) {
                 if_octane_create_inline_button(
-                    chunk.phrase,
                     chunk.title,
                     chunk.parseAction,
                     chunk.clickOnce
@@ -349,16 +348,12 @@ function printCredits() {
     if_octane_force_new_paragraph = true;
 }
 
-function if_octane_create_inline_button(str, tooltip, func, clickOnce=false) {
+function if_octane_create_inline_button(tooltip, func, clickOnce=false) {
     const paragraphEl = if_octane_get_last_paragraph();
 
     const button = document.createElement('button');
-    if_octane_fuse_text_to(
-        str,
-        paragraphEl
-    );
     paragraphEl.appendChild(button);
-    button.textContent = clickOnce ? "\u25B6" : "\u21BB";
+    button.textContent = clickOnce ? "1" : "\u25B6";
     button.setAttribute("aria-label", clickOnce ? "single use" : "repeatable");
     button.title = tooltip;
     button.isClickOnce = clickOnce;
@@ -381,7 +376,6 @@ function if_octane_create_inline_button(str, tooltip, func, clickOnce=false) {
 
 function if_octane_spend_button(buttonElement, isSpent=false) {
     buttonElement.setAttribute("aria-disabled", "true");
-    buttonElement.title = "spent";
     if (isSpent) {
         // Announce to screen readers that the button has been disabled.
         announcementManager.addMessage("Action button has been spent.");
@@ -431,14 +425,14 @@ function if_octane_separate_turn_text(action) {
     gotoLink.innerText = "Jump to latest content";
     gotoLink.className = "latest-link";
     gotoLink.href = "#" + IF_OCTANE_LATEST_REPORT_ID;
-    gotoLink.style.display = "none";
+    gotoLink.style.visibility = "hidden";
     newTranscript.appendChild(gotoLink);
 
     // Set the latest section element to not be the latest anymore
     if (if_octane_report_sections.length > 0) {
         const prevSection = if_octane_report_sections[if_octane_report_sections.length - 1];
         prevSection.header.removeAttribute("id");
-        prevSection.gotoLink.style.display = "block";
+        prevSection.gotoLink.style.visibility = "visible";
     }
 
     newHeader.id = IF_OCTANE_LATEST_REPORT_ID;
