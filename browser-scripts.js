@@ -383,7 +383,7 @@ function if_octane_spend_button(buttonElement, isSpent=false) {
 }
 
 function if_octane_get_truncated_turn_header(action) {
-    const maxLen = 16;
+    const maxLen = 40;
     const actionParts = action.toLowerCase().split(' ');
     let truncatedAction = actionParts[0];
     let truncatedLen = actionParts[0].length;
