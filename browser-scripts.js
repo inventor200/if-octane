@@ -10,6 +10,8 @@ var if_octane_paragraphs_count = 0;
 var if_octane_inline_action_count = 0;
 var if_octane_grouped_action_count = 0;
 
+// Live region management
+
 const ANNOUNCEMENT_TYPE_TEXT = 0;
 const ANNOUNCEMENT_TYPE_AUDIO = 1;
 
@@ -22,6 +24,7 @@ class LiveRegionManager {
         this.isLocked = false;
         this.fusionDiv = undefined;
         this.announcementPacket = undefined;
+        this.audioQueue = [];
     }
 
     getDiv() {
@@ -43,6 +46,66 @@ class LiveRegionManager {
 
         this.announcementPacket.remove();
         this.announcementPacket = undefined;
+
+        // Dump audio into queue and sort
+        this.audioQueue = [];
+        
+        while (this.mainBuffer.length > 0) {
+            const message = this.mainBuffer.shift();
+            if (message.type != ANNOUNCEMENT_TYPE_AUDIO) {
+                // Nevermind; audio is done
+                this.mainBuffer.unshift(message);
+                break;
+            }
+            else {
+                this.audioQueue.push(message.content);
+            }
+        }
+
+        if (this.audioQueue.length > 0) {
+            const limitedSounds = [];
+            const unlimitedSounds = [];
+            while (this.audioQueue.length > 0) {
+                const snd = this.audioQueue.shift();
+                if (snd.channel < AUDIO_CHANNEL_BACKGROUND) {
+                    limitedSounds.push(snd);
+                }
+                else {
+                    unlimitedSounds.push(snd);
+                }
+            }
+
+            // Change over the unlimited sounds
+            if_octane_sync_background_audio(unlimitedSounds);
+
+            if (limitedSounds.length > 0) {
+                // Sort limited sounds
+                for (let i = 0; i < limitedSounds.length; i++) {
+                    limitedSounds[i].playOrder = i;
+                }
+
+                limitedSounds.sort((a, b) => a.getPriority() - b.getPriority());
+                const survivingSounds = [];
+
+                // Announcements cannot be delayed more than 3 seconds
+                // for accessibility reasons.
+                let totalDuration = 0;
+                while (totalDuration < 3.0 && limitedSounds.length > 0) {
+                    const survivingSound = limitedSounds.shift();
+                    survivingSounds.push(survivingSound);
+                    totalDuration += survivingSound.duration;
+                }
+
+                survivingSounds.sort((a, b) => a.playOrder - b.playOrder);
+
+                this.audioQueue = survivingSounds;
+            }
+        }
+        else {
+            //TODO: Add default sound
+        }
+
+        if_octane_restore_foreground_volume();
     }
 
     addMessage(str, msgType=ANNOUNCEMENT_TYPE_TEXT) {
@@ -73,12 +136,13 @@ class LiveRegionManager {
         if (this.mainBuffer.length === 0) return;
 
         this.isLocked = true;
+
         this.clearDiv();
         this.iterateDump();
     }
 
     iterateDump() {
-        if (this.mainBuffer.length === 0) {
+        if (this.mainBuffer.length === 0 && this.audioQueue.length === 0) {
             this.endDump();
             return;
         }
@@ -89,27 +153,34 @@ class LiveRegionManager {
 
         let armedSound = undefined;
 
-        while (this.mainBuffer.length > 0) {
-            const message = this.mainBuffer.shift();
-            if (message.type === ANNOUNCEMENT_TYPE_TEXT) {
-                this.announcementPacket.textContent += (' ' + message.content);
-            }
-            else if (message.type === ANNOUNCEMENT_TYPE_AUDIO) {
-                armedSound = message.content;
-                break;
-            }
+        if (this.audioQueue.length > 0) {
+            armedSound = this.audioQueue.shift();
         }
+        else {
+            while (this.mainBuffer.length > 0) {
+                const message = this.mainBuffer.shift();
+                if (message.type === ANNOUNCEMENT_TYPE_TEXT) {
+                    this.announcementPacket.textContent += (' ' + message.content);
+                }
+                else if (message.type === ANNOUNCEMENT_TYPE_AUDIO) {
+                    armedSound = message.content;
+                    break;
+                }
+            }
 
-        if (this.mainBuffer.length === 0) {
-            this.getDiv().appendChild(this.announcementPacket);
+            if (this.mainBuffer.length === 0) {
+                this.getDiv().appendChild(this.announcementPacket);
+            }
         }
 
         var lockDelay = IF_OCTANE_LIVE_REGION_LOCK_DELAY;
 
         if (armedSound) {
-            //TODO: if armedSound has content, play it.
-            // lockDelay will be the duration of the sound in milliseconds.
-            // lockDelay also cannot be longer than 3 seconds.
+            lockDelay = playAudioFromObject(armedSound);
+            if (this.audioQueue.length === 0) {
+                // Prepare fadeout
+                setTimeout(() => { if_octane_fade_foreground_volume(); }, 500);
+            }
         }
 
         const _this = this;
@@ -118,10 +189,11 @@ class LiveRegionManager {
 
     endDump() {
         // Make sure there are no stragglers
-        if (this.mainBuffer.length > 0) {
+        if (this.mainBuffer.length > 0 || this.audioQueue.length > 0) {
             this.iterateDump();
             return;
         }
+
         if (this.secondaryBuffer.length === 0) {
             this.isLocked = false;
             return;
@@ -139,6 +211,14 @@ class LiveRegionManager {
 // Firefox forces aria-atomic="true" behavior, so we are using a manager
 // to enforce the correct behavior.
 const announcementManager = new LiveRegionManager("sr-announcements");
+
+function queueAnnouncement(message) {
+    announcementManager.addMessage(message, ANNOUNCEMENT_TYPE_TEXT);
+}
+
+function queueSFX(audioObject) {
+    announcementManager.addMessage(audioObject, ANNOUNCEMENT_TYPE_AUDIO);
+}
 
 function if_octane_get_output_element() {
     if (!if_octane_output_element) {
