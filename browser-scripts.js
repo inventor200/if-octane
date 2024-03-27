@@ -25,6 +25,7 @@ class LiveRegionManager {
         this.fusionDiv = undefined;
         this.announcementPacket = undefined;
         this.audioQueue = [];
+        this.armedFade = false;
     }
 
     getDiv() {
@@ -35,31 +36,17 @@ class LiveRegionManager {
         return this.div;
     }
 
-    shiftContent(contentDiv) {
-        this.getDiv().parentElement.insertBefore(
-            contentDiv, this.getDiv()
-        );
-    }
-
     clearDiv() {
-        if (!this.announcementPacket) return;
-
-        this.announcementPacket.remove();
-        this.announcementPacket = undefined;
-
         // Dump audio into queue and sort
         this.audioQueue = [];
+        this.armedFade = false;
         
         while (this.mainBuffer.length > 0) {
-            const message = this.mainBuffer.shift();
-            if (message.type != ANNOUNCEMENT_TYPE_AUDIO) {
-                // Nevermind; audio is done
-                this.mainBuffer.unshift(message);
+            if (this.mainBuffer[0].type != ANNOUNCEMENT_TYPE_AUDIO) {
+                // We have reached the end of audio content
                 break;
             }
-            else {
-                this.audioQueue.push(message.content);
-            }
+            this.audioQueue.push(this.mainBuffer.shift().content);
         }
 
         if (this.audioQueue.length > 0) {
@@ -93,7 +80,13 @@ class LiveRegionManager {
                 while (totalDuration < 3.0 && limitedSounds.length > 0) {
                     const survivingSound = limitedSounds.shift();
                     survivingSounds.push(survivingSound);
-                    totalDuration += survivingSound.duration;
+
+                    // If a sound has a long tail or something, then
+                    // we're gonna assume the important content appears
+                    // within one second.
+                    let simpleDuration = survivingSound.audioFile.buffer.duration;
+                    if (simpleDuration > 1.0) simpleDuration = 1.0;
+                    totalDuration += simpleDuration;
                 }
 
                 survivingSounds.sort((a, b) => a.playOrder - b.playOrder);
@@ -106,6 +99,12 @@ class LiveRegionManager {
         }
 
         if_octane_restore_foreground_volume();
+
+        // Handle the screen reader announcement div
+        if (!this.announcementPacket) return;
+
+        this.announcementPacket.remove();
+        this.announcementPacket = undefined;
     }
 
     addMessage(str, msgType=ANNOUNCEMENT_TYPE_TEXT) {
@@ -125,6 +124,7 @@ class LiveRegionManager {
                 const currentType = dest[i].type;
                 if (currentType === ANNOUNCEMENT_TYPE_AUDIO) continue;
                 dest.insert(i, newMsg);
+                break;
             }
         }
         else {
@@ -133,7 +133,9 @@ class LiveRegionManager {
     }
 
     startDump() {
-        if (this.mainBuffer.length === 0) return;
+        if (this.isLocked) return; // This will resolve itself later
+
+        if (this.mainBuffer.length === 0) return; // There's nothing to do
 
         this.isLocked = true;
 
@@ -152,34 +154,85 @@ class LiveRegionManager {
         }
 
         let armedSound = undefined;
+        let audioQueueDuration = 0;
+        let useFade = false;
 
         if (this.audioQueue.length > 0) {
+            if (!this.armedFade) {
+                // This only runs once, because this.armedFade is set
+                // when the first sound is played later.
+
+                // Measure the total duration of the audio queue
+                for (let i = 0; i < this.audioQueue.length; i++) {
+                    audioQueueDuration += this.audioQueue[i].audioFile.buffer.duration;
+                }
+
+                useFade = (audioQueueDuration >= 2.5);
+
+                // For sounds that are really long (1+ seconds),
+                // we will mark them as "rude". Any "polite" sounds
+                // will play however long they need to, and the remaining
+                // time will be split up among the rude sounds.
+                //
+                // We have 3 seconds to play everything, in order to
+                // follow accessibility standards.
+                let rudeDuration = 3.0;
+                const rudeSounds = [];
+
+                for (let i = 0; i < this.audioQueue.length; i++) {
+                    const sound = this.audioQueue[i];
+                    const myDuration = sound.audioFile.buffer.duration;
+                    if (myDuration < 1.0) {
+                        rudeDuration -= myDuration;
+                    }
+                    else {
+                        rudeSounds.push(sound);
+                    }
+                }
+
+                if (rudeSounds.length > 0) {
+                    rudeDuration /= rudeSounds.length;
+
+                    // Set duration overrides for rude sounds
+                    for (let i = 0; i < rudeSounds.length; i++) {
+                        rudeSounds[i].duration = rudeDuration;
+                    }
+                }
+
+                audioQueueDuration = Math.floor(audioQueueDuration * 1000);
+            }
+            
             armedSound = this.audioQueue.shift();
         }
         else {
             while (this.mainBuffer.length > 0) {
-                const message = this.mainBuffer.shift();
-                if (message.type === ANNOUNCEMENT_TYPE_TEXT) {
-                    this.announcementPacket.textContent += (' ' + message.content);
-                }
-                else if (message.type === ANNOUNCEMENT_TYPE_AUDIO) {
-                    armedSound = message.content;
-                    break;
-                }
+                this.announcementPacket.textContent +=
+                    (' ' + this.mainBuffer.shift().content);
             }
 
-            if (this.mainBuffer.length === 0) {
-                this.getDiv().appendChild(this.announcementPacket);
-            }
+            this.getDiv().appendChild(this.announcementPacket);
         }
 
         var lockDelay = IF_OCTANE_LIVE_REGION_LOCK_DELAY;
 
         if (armedSound) {
             lockDelay = playAudioFromObject(armedSound);
-            if (this.audioQueue.length === 0) {
+            if (!this.armedFade) {
                 // Prepare fadeout
-                setTimeout(() => { if_octane_fade_foreground_volume(); }, 500);
+                const batchObj = {
+                    fader: if_octane_get_active_fader()
+                };
+                if (useFade) {
+                    setTimeout(() => {
+                        if_octane_fade_foreground_volume(batchObj);
+                    }, 2500);
+                }
+                else {
+                    setTimeout(() => {
+                        if_octane_interrupt_foreground_audio(batchObj);
+                    }, audioQueueDuration);
+                }
+                this.armedFade = true;
             }
         }
 

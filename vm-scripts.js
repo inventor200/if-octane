@@ -1,5 +1,7 @@
 // This is for anything that uses browser and WASM.
 
+const IF_OCTANE_USING_EMBEDDING = true;
+
 var if_octane_emready1 = false;
 var if_octane_emready2 = false;
 var if_octane_emready3 = false;
@@ -243,23 +245,11 @@ function createAudioObject(audioName, channel=AUDIO_CHANNEL_UI) {
     const source = if_octane_audio_context.createBufferSource();
     source.buffer = audioFile.buffer;
 
-    let waitDuration = 0;
-
-    if (channel < AUDIO_CHANNEL_BACKGROUND) {
-        waitDuration = audioFile.buffer.duration;
-        // Sounds cannot delay for more than 1 second.
-        // We are also not playing more than 3 sounds between turns,
-        // because accessibility guidelines dictate no more than
-        // 3 seconds of sounds, which might interrupt screen readers.
-        if (waitDuration > 1) waitDuration = 1.0;
-    }
-
     return {
         audioFile: audioFile,
         source: source,
         channel: channel,
         priorityOffset: 0,
-        duration: waitDuration,
         getPriority: function() {
             return audioFile.priority + this.priorityOffset;
         }
@@ -278,15 +268,66 @@ function playAudioFromObject(audioObject) {
         if_octane_audio_context.resume();
     }
 
-    //TODO: Process audio effects, and volume control
     let tailEnd = audioObject.source;
+
+    if (
+        audioObject.channel != AUDIO_CHANNEL_UI &&
+        audioObject.channel != AUDIO_CHANNEL_MUSIC
+    ) {
+        //TODO: Process audio effects
+    }
+
+    if (audioObject.channel < AUDIO_CHANNEL_BACKGROUND) {
+        tailEnd = tailEnd
+            .connect(if_octane_user_sfx_volume_fader)
+            .connect(if_octane_user_sfx_volume_controller);
+        if_octane_get_active_fader().sources.push(audioObject.source);
+    }
+    else if (audioObject.channel === AUDIO_CHANNEL_MUSIC) {
+        tailEnd = tailEnd
+            .connect(if_octane_user_music_volume_fader)
+            .connect(if_octane_user_music_volume_controller);
+    }
+    else {
+        tailEnd = tailEnd
+            .connect(if_octane_user_background_volume_fader)
+            .connect(if_octane_user_background_volume_controller);
+    }
 
     tailEnd.connect(if_octane_audio_context.destination);
     audioObject.source.start();
 
     // Return the milliseconds to wait before playing the next audio
-    return Math.floor(audioObject.duration * 1000);
+    let myDuration = audioObject.audioFile.buffer.duration;
+    if (audioObject.duration != undefined) {
+        // This override gets set when sfx are cramming for play time.
+        myDuration = audioObject.duration;
+    }
+    return Math.floor(myDuration * 1000);
 }
+
+const if_octane_active_faders = [];
+
+var if_octane_user_sfx_volume = 1.0;
+const if_octane_user_sfx_volume_controller = if_octane_audio_context.createGain();
+if_octane_user_sfx_volume_controller.gain.value = if_octane_user_sfx_volume;
+
+var if_octane_user_sfx_volume_fader;
+if_octane_restore_foreground_volume();
+
+var if_octane_user_background_volume = 0.75;
+const if_octane_user_background_volume_controller = if_octane_audio_context.createGain();
+if_octane_user_background_volume_controller.gain.value = if_octane_user_background_volume;
+
+const if_octane_user_background_volume_fader = if_octane_audio_context.createGain();
+if_octane_user_background_volume_fader.gain.value = 1.0;
+
+var if_octane_user_music_volume = 0.5;
+const if_octane_user_music_volume_controller = if_octane_audio_context.createGain();
+if_octane_user_music_volume_controller.gain.value = if_octane_user_music_volume;
+
+const if_octane_user_music_volume_fader = if_octane_audio_context.createGain();
+if_octane_user_music_volume_fader.gain.value = 1.0;
 
 function if_octane_sync_background_audio(audioObjectList) {
     if (audioObjectList.length === 0) return;
@@ -294,10 +335,58 @@ function if_octane_sync_background_audio(audioObjectList) {
     //TODO: Transition background sfx and music
 }
 
-function if_octane_restore_foreground_volume() {
-    //TODO: Implement
+function if_octane_get_active_fader() {
+    if (if_octane_active_faders.length === 0) return undefined;
+
+    return if_octane_active_faders[if_octane_active_faders.length - 1];
 }
 
-function if_octane_fade_foreground_volume() {
-    //TODO: Implement
+function if_octane_restore_foreground_volume() {
+    if_octane_user_sfx_volume_fader = if_octane_audio_context.createGain();
+    if_octane_user_sfx_volume_fader.gain.value = 1.0;
+    if_octane_active_faders.push({
+        node: if_octane_user_sfx_volume_fader,
+        sources: [],
+        hasFade: false,
+        isStopped: false
+    });
+
+    while (
+        if_octane_active_faders.length > 0 &&
+        if_octane_active_faders[0].isStopped
+    ) {
+        if_octane_active_faders.shift();
+    }
+}
+
+function if_octane_fade_foreground_volume(batchObj) {
+    if (batchObj.fader.hasFade || batchObj.fader.isStopped) return;
+
+    batchObj.fader.hasFade = true;
+
+    // Set the start time of the fade
+    batchObj.fader.node.gain.setValueAtTime(
+        1.0, if_octane_audio_context.currentTime
+    );
+    // Start the fade
+    batchObj.fader.node.gain.linearRampToValueAtTime(
+        0, if_octane_audio_context.currentTime + 0.5
+    );
+
+    setTimeout(() => { if_octane_interrupt_foreground_audio(batchObj); }, 500);
+}
+
+function if_octane_interrupt_foreground_audio(batchObj) {
+    if (batchObj.fader.isStopped) return;
+
+    const activeSources = batchObj.fader.sources;
+
+    while (activeSources.length > 0) {
+        const source = activeSources.shift();
+        source.stop();
+        source.disconnect();
+    }
+
+    batchObj.fader.node.disconnect();
+    batchObj.fader.isStopped = true;
 }
