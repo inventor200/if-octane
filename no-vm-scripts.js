@@ -53,6 +53,11 @@ function playAudioFromObject(audioObject) {
     if_octane_fallback_no_media_error();
 }
 
+function if_octane_arm_new_background_environment(environmentAudioProfile) {
+    // This could be innocently called in a non-vm mode, so don't
+    // throw an error for this.
+}
+
 function if_octane_sync_background_audio(audioObjectList) {
     if_octane_fallback_no_media_error();
 }

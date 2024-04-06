@@ -338,9 +338,16 @@ function playAudioFromObject(audioObject) {
         if_octane_background_channel.connect(audioObject, tailEnd);
     }
 
-    //TODO: Handle objects with isLoop
-
-    audioObject.source.start();
+    if (
+        audioObject.channel === AUDIO_CHANNEL_BACKGROUND &&
+        !audioObject.isLoop()
+    ) {
+        //TODO: Handle randomly-playing background sound
+    }
+    else {
+        //TODO: Handle looping sounds
+        audioObject.source.start();
+    }
 
     // Return the milliseconds to wait before playing the next audio
     let myDuration = audioObject.audioFile.buffer.duration;
@@ -378,6 +385,7 @@ class AudioChannel {
         this.volumeController.gain.value = startingVolume;
         this.faderGroups = [new AudioFadeGroup(this.volumeController)];
         this.neededGCIterations = 0;
+        this.forceNewEnvironment = false;
     }
 
     setVolume(newVolume) {
@@ -478,8 +486,12 @@ class AudioChannel {
         this.sendToGC();
     }
 
+    //TODO: Set up a test case for this
     syncPlayingSounds(audioObjectList) {
-        if (audioObjectList.length === 0) return;
+        if (audioObjectList.length === 0) {
+            this.forceNewEnvironment = false;
+            return;
+        }
 
         const isSilence = audioObjectList[audioObjectList.length - 1].isSilence;
 
@@ -498,40 +510,40 @@ class AudioChannel {
         // Audio that is brand-new
         const newAudio = [];
 
-        if (!isSilence && activeFaders.length > 0) {
-            for (let i = 0; i < audioObjectList.length; i++) {
-                const incomingAudio = audioObjectList[i];
-                let foundMatch = false;
-                for (let j = 0; j < activeFaders.length; j++) {
-                    const compareFader = activeFaders[j];
-                    for (let k = 0; k < compareFader.sources.length; k++) {
-                        const compareSource = compareFader.sources[k];
-                        if (incomingAudio.audioFile.buffer != compareSource.audioFile.buffer) {
-                            // Already playing; move it to the new fader
-                            preservedAudio.push(incomingAudio);
-                            // Remove it from the old fader's list
-                            compareFader.sources.splice(k, 1);
-                            foundMatch = true;
-                            break;
-                        }
-                    }
-                    if (foundMatch) break;
-                }
-
-                if (!foundMatch) {
-                    // Not playing; add it to the new fader
-                    newAudio.push(incomingAudio);
-                }
-            }
-        }
-        else {
-            // All incoming audio is new
-            for (let i = 0; i < audioObjectList.length; i++) {
-                newAudio.push(audioObjectList[i]);
-            }
-        }
-
         if (!isSilence) {
+            if (!this.forceNewEnvironment && activeFaders.length > 0) {
+                for (let i = 0; i < audioObjectList.length; i++) {
+                    const incomingAudio = audioObjectList[i];
+                    let foundMatch = false;
+                    for (let j = 0; j < activeFaders.length; j++) {
+                        const compareFader = activeFaders[j];
+                        for (let k = 0; k < compareFader.sources.length; k++) {
+                            const compareSource = compareFader.sources[k];
+                            if (incomingAudio.audioFile.buffer != compareSource.audioFile.buffer) {
+                                // Already playing; move it to the new fader
+                                preservedAudio.push(incomingAudio);
+                                // Remove it from the old fader's list
+                                compareFader.sources.splice(k, 1);
+                                foundMatch = true;
+                                break;
+                            }
+                        }
+                        if (foundMatch) break;
+                    }
+    
+                    if (!foundMatch) {
+                        // Not playing; add it to the new fader
+                        newAudio.push(incomingAudio);
+                    }
+                }
+            }
+            else {
+                // All incoming audio is new
+                for (let i = 0; i < audioObjectList.length; i++) {
+                    newAudio.push(audioObjectList[i]);
+                }
+            }
+
             const preservedFader = this.getNewFader();
 
             // Do the move
@@ -546,6 +558,7 @@ class AudioChannel {
         let newFader = undefined;
         let referenceNow = undefined;
         if (!isSilence && newAudio.length > 0) {
+            // This must get created AFTER preservedFader!
             newFader = this.getNewFader();
             // Set currentTime, and start the fade-in
             newFader.node.gain.setValueAtTime(
@@ -562,12 +575,13 @@ class AudioChannel {
         if (newFader) {
             // Add new audio
             for (let i = 0; i < newAudio.length; i++) {
-                //TODO: Handle randomly-playing sounds
                 playAudioFromObject(newAudio[i]);
             }
 
             this.fadeIn({ fader: newFader }, referenceNow);
         }
+
+        this.forceNewEnvironment = false;
     }
 
     sendToGC() {
@@ -601,8 +615,13 @@ const if_octane_foreground_channel = new AudioChannel(1.0);
 const if_octane_background_channel = new AudioChannel(0.75);
 const if_octane_music_channel = new AudioChannel(0.5);
 
-//TODO: Create a standard silence audio for clearing background, music, and
-// for preventing default foreground audio.
+// This gets called when changing between locations different enough to
+// change how audio is perceived. In simpler situations, this is called
+// when moving from one room to another.
+function if_octane_arm_new_background_environment(environmentAudioProfile) {
+    if_octane_background_channel.forceNewEnvironment = true;
+}
+
 function if_octane_sync_background_audio(audioObjectList) {
     if (audioObjectList.length === 0) return;
 

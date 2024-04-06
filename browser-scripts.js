@@ -14,6 +14,7 @@ var if_octane_grouped_action_count = 0;
 
 const ANNOUNCEMENT_TYPE_TEXT = 0;
 const ANNOUNCEMENT_TYPE_AUDIO = 1;
+const IF_OCTANE_RUDE_DURATION_THRESHOLD = 0.75;
 
 class LiveRegionManager {
     constructor(id) {
@@ -106,7 +107,9 @@ class LiveRegionManager {
                         // we're gonna assume the important content appears
                         // within one second.
                         let simpleDuration = survivingSound.audioFile.buffer.duration;
-                        if (simpleDuration > 1.0) simpleDuration = 1.0;
+                        if (simpleDuration > IF_OCTANE_RUDE_DURATION_THRESHOLD) {
+                            simpleDuration = IF_OCTANE_RUDE_DURATION_THRESHOLD;
+                        }
                         totalDuration += simpleDuration;
                     }
 
@@ -216,7 +219,7 @@ class LiveRegionManager {
                 for (let i = 0; i < this.audioQueue.length; i++) {
                     const sound = this.audioQueue[i];
                     const myDuration = sound.audioFile.buffer.duration;
-                    if (myDuration < 1.0) {
+                    if (myDuration < IF_OCTANE_RUDE_DURATION_THRESHOLD) {
                         rudeDuration -= myDuration;
                     }
                     else {
