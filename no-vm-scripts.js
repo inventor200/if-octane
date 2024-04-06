@@ -6,10 +6,20 @@ window.onload = function() {
 
 const IF_OCTANE_USING_EMBEDDING = false;
 
+class FakeAudioChannel {
+    constructor(startingVolume) {
+        this.volume = startingVolume;
+    }
+
+    setVolume(newVolume) {
+        this.volume = newVolume;
+    }
+}
+
 const if_octane_audio_context = undefined;
-var if_octane_user_sfx_volume = 1.0;
-var if_octane_user_background_volume = 1.0;
-var if_octane_user_music_volume = 1.0;
+const if_octane_foreground_channel = new FakeAudioChannel(1.0);
+const if_octane_background_channel = new FakeAudioChannel(0.75);
+const if_octane_music_channel = new FakeAudioChannel(0.5);
 
 function if_octane_fallback_no_media_error() {
     console.error('No audio found: "' + audioName + '"');
@@ -34,21 +44,5 @@ function playAudioFromObject(audioObject) {
 }
 
 function if_octane_sync_background_audio(audioObjectList) {
-    if_octane_fallback_no_media_error();
-}
-
-function if_octane_get_active_fader() {
-    if_octane_fallback_no_media_error();
-}
-
-function if_octane_restore_foreground_volume() {
-    if_octane_fallback_no_media_error();
-}
-
-function if_octane_fade_foreground_volume() {
-    if_octane_fallback_no_media_error();
-}
-
-function if_octane_interrupt_foreground_audio() {
     if_octane_fallback_no_media_error();
 }

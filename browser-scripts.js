@@ -98,7 +98,7 @@ class LiveRegionManager {
             //TODO: Add default sound
         }
 
-        if_octane_restore_foreground_volume();
+        if_octane_foreground_channel.reload();
 
         // Handle the screen reader announcement div
         if (!this.announcementPacket) return;
@@ -220,16 +220,16 @@ class LiveRegionManager {
             if (!this.armedFade) {
                 // Prepare fadeout
                 const batchObj = {
-                    fader: if_octane_get_active_fader()
+                    fader: if_octane_foreground_channel.getActiveFader()
                 };
                 if (useFade) {
                     setTimeout(() => {
-                        if_octane_fade_foreground_volume(batchObj);
+                        if_octane_foreground_channel.fade(batchObj);
                     }, 2500);
                 }
                 else {
                     setTimeout(() => {
-                        if_octane_interrupt_foreground_audio(batchObj);
+                        if_octane_foreground_channel.stop(batchObj);
                     }, audioQueueDuration);
                 }
                 this.armedFade = true;

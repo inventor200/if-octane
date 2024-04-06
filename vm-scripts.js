@@ -278,23 +278,15 @@ function playAudioFromObject(audioObject) {
     }
 
     if (audioObject.channel < AUDIO_CHANNEL_BACKGROUND) {
-        tailEnd = tailEnd
-            .connect(if_octane_user_sfx_volume_fader)
-            .connect(if_octane_user_sfx_volume_controller);
-        if_octane_get_active_fader().sources.push(audioObject.source);
+        if_octane_foreground_channel.connect(audioObject, tailEnd);
     }
     else if (audioObject.channel === AUDIO_CHANNEL_MUSIC) {
-        tailEnd = tailEnd
-            .connect(if_octane_user_music_volume_fader)
-            .connect(if_octane_user_music_volume_controller);
+        if_octane_music_channel.connect(audioObject, tailEnd);
     }
     else {
-        tailEnd = tailEnd
-            .connect(if_octane_user_background_volume_fader)
-            .connect(if_octane_user_background_volume_controller);
+        if_octane_background_channel.connect(audioObject, tailEnd);
     }
 
-    tailEnd.connect(if_octane_audio_context.destination);
     audioObject.source.start();
 
     // Return the milliseconds to wait before playing the next audio
@@ -306,87 +298,115 @@ function playAudioFromObject(audioObject) {
     return Math.floor(myDuration * 1000);
 }
 
-const if_octane_active_faders = [];
+class AudioFadeGroup {
+    constructor(volumeController) {
+        const faderNode = if_octane_audio_context.createGain();
+        faderNode.gain.value = 1.0;
+        faderNode.connect(volumeController);
+        this.node = faderNode;
+        this.sources = [];
+        this.hasFade = false;
+        this.isStopped = false;
+    }
+}
 
-var if_octane_user_sfx_volume = 1.0;
-const if_octane_user_sfx_volume_controller = if_octane_audio_context.createGain();
-if_octane_user_sfx_volume_controller.gain.value = if_octane_user_sfx_volume;
+class AudioChannel {
+    constructor(startingVolume) {
+        this.volume = startingVolume;
+        this.volumeController = if_octane_audio_context.createGain();
+        this.volumeController.connect(if_octane_audio_context.destination);
+        this.volumeController.gain.value = startingVolume;
+        this.faderGroups = [new AudioFadeGroup(this.volumeController)];
+        this.neededGCIterations = 0;
+    }
 
-var if_octane_user_sfx_volume_fader;
-if_octane_restore_foreground_volume();
+    setVolume(newVolume) {
+        this.volume = newVolume;
+        this.volumeController.gain.value = newVolume;
+    }
 
-var if_octane_user_background_volume = 0.75;
-const if_octane_user_background_volume_controller = if_octane_audio_context.createGain();
-if_octane_user_background_volume_controller.gain.value = if_octane_user_background_volume;
+    getActiveFader() {
+        if (this.faderGroups.length === 0) return undefined;
 
-const if_octane_user_background_volume_fader = if_octane_audio_context.createGain();
-if_octane_user_background_volume_fader.gain.value = 1.0;
+        return this.faderGroups[this.faderGroups.length - 1];
+    }
 
-var if_octane_user_music_volume = 0.5;
-const if_octane_user_music_volume_controller = if_octane_audio_context.createGain();
-if_octane_user_music_volume_controller.gain.value = if_octane_user_music_volume;
+    reload() {
+        this.faderGroups.push(new AudioFadeGroup(this.volumeController));
+        this.sendToGC();
+    }
 
-const if_octane_user_music_volume_fader = if_octane_audio_context.createGain();
-if_octane_user_music_volume_fader.gain.value = 1.0;
+    fade(batchObj) {
+        const fader = batchObj.fader;
+        if (fader.isStopped) return;
+        if (fader.hasFade) return;
+
+        fader.hasFade = true;
+
+        // Set the start time of the fade
+        fader.node.gain.setValueAtTime(
+            1.0, if_octane_audio_context.currentTime
+        );
+        // Start the fade
+        fader.node.gain.linearRampToValueAtTime(
+            0, if_octane_audio_context.currentTime + 0.5
+        );
+
+        const _this = this;
+        setTimeout(() => { _this.stop({
+            fader: fader
+        }); }, 500);
+    }
+
+    stop(batchObj) {
+        const fader = batchObj.fader;
+        if (fader.isStopped) return;
+
+        const activeSources = fader.sources;
+
+        while (activeSources.length > 0) {
+            const source = activeSources.shift();
+            source.stop();
+            source.disconnect();
+        }
+
+        fader.node.disconnect();
+        fader.isStopped = true;
+
+        this.sendToGC();
+    }
+
+    sendToGC() {
+        this.neededGCIterations++;
+        if (this.neededGCIterations > 1) return;
+
+        // Thread-safe, simple, and we won't be dealing with
+        // enough sfx at once that this will become a complexity issue.
+        while (this.neededGCIterations > 0) {
+            for (let i = 0; i < this.faderGroups.length - 1; i++) {
+                const oldFader = this.faderGroups[i];
+                if (oldFader.isStopped) {
+                    this.faderGroups.splice(i, 1);
+                    i--;
+                }
+            }
+            this.neededGCIterations--;
+        }
+    }
+
+    connect(audioObject, tailEnd) {
+        const active = this.getActiveFader();
+        active.sources.push(audioObject.source);
+        tailEnd.connect(active.node);
+    }
+}
+
+const if_octane_foreground_channel = new AudioChannel(1.0);
+const if_octane_background_channel = new AudioChannel(0.75);
+const if_octane_music_channel = new AudioChannel(0.5);
 
 function if_octane_sync_background_audio(audioObjectList) {
     if (audioObjectList.length === 0) return;
 
     //TODO: Transition background sfx and music
-}
-
-function if_octane_get_active_fader() {
-    if (if_octane_active_faders.length === 0) return undefined;
-
-    return if_octane_active_faders[if_octane_active_faders.length - 1];
-}
-
-function if_octane_restore_foreground_volume() {
-    if_octane_user_sfx_volume_fader = if_octane_audio_context.createGain();
-    if_octane_user_sfx_volume_fader.gain.value = 1.0;
-    if_octane_active_faders.push({
-        node: if_octane_user_sfx_volume_fader,
-        sources: [],
-        hasFade: false,
-        isStopped: false
-    });
-
-    while (
-        if_octane_active_faders.length > 0 &&
-        if_octane_active_faders[0].isStopped
-    ) {
-        if_octane_active_faders.shift();
-    }
-}
-
-function if_octane_fade_foreground_volume(batchObj) {
-    if (batchObj.fader.hasFade || batchObj.fader.isStopped) return;
-
-    batchObj.fader.hasFade = true;
-
-    // Set the start time of the fade
-    batchObj.fader.node.gain.setValueAtTime(
-        1.0, if_octane_audio_context.currentTime
-    );
-    // Start the fade
-    batchObj.fader.node.gain.linearRampToValueAtTime(
-        0, if_octane_audio_context.currentTime + 0.5
-    );
-
-    setTimeout(() => { if_octane_interrupt_foreground_audio(batchObj); }, 500);
-}
-
-function if_octane_interrupt_foreground_audio(batchObj) {
-    if (batchObj.fader.isStopped) return;
-
-    const activeSources = batchObj.fader.sources;
-
-    while (activeSources.length > 0) {
-        const source = activeSources.shift();
-        source.stop();
-        source.disconnect();
-    }
-
-    batchObj.fader.node.disconnect();
-    batchObj.fader.isStopped = true;
 }
