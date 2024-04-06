@@ -224,7 +224,7 @@ class LiveRegionManager {
                 };
                 if (useFade) {
                     setTimeout(() => {
-                        if_octane_foreground_channel.fade(batchObj);
+                        if_octane_foreground_channel.fadeOut(batchObj);
                     }, 2500);
                 }
                 else {

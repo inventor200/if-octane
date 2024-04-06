@@ -336,7 +336,7 @@ class AudioChannel {
         this.sendToGC();
     }
 
-    fade(batchObj) {
+    fadeOut(batchObj) {
         const fader = batchObj.fader;
         if (fader.isStopped) return;
         if (fader.hasFade) return;
@@ -356,6 +356,35 @@ class AudioChannel {
         setTimeout(() => { _this.stop({
             fader: fader
         }); }, 500);
+    }
+
+    fadeIn(batchObj) {
+        const fader = batchObj.fader;
+        if (fader.isStopped) return;
+        if (fader.hasFade) return;
+
+        // Set the start time of the fade
+        fader.node.gain.setValueAtTime(
+            0.0, if_octane_audio_context.currentTime
+        );
+        // Start the fade
+        fader.node.gain.linearRampToValueAtTime(
+            1.0, if_octane_audio_context.currentTime + 0.5
+        );
+    }
+
+    fadeOutAllExcept(batchObj) {
+        const fader = batchObj.fader;
+        for (let i = 0; i < this.faderGroups.length; i++) {
+            const grp = this.faderGroups[i];
+            if (fader === grp) continue;
+            this.fadeOut(grp);
+        }
+    }
+
+    fadeTransitionFor(batchObj) {
+        this.fadeOutAllExcept(batchObj);
+        this.fadeIn(batchObj);
     }
 
     stop(batchObj) {
