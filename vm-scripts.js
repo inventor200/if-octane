@@ -248,11 +248,7 @@ function createAudioObject(audioName, channel=AUDIO_CHANNEL_UI) {
     if (audioName === AUDIO_SILENCE) {
         return {
             isSilence: true,
-            audioFile: undefined,
-            source: undefined,
             channel: channel,
-            faderGroup: undefined,
-            connectionTail: undefined,
             priorityOffset: 0,
             getPriority: function() {
                 return 0;
@@ -310,6 +306,11 @@ function setAudioLoopStatus(audioName, isLoop) {
     audioFile.isLoop = isLoop;
 }
 
+function setAudioFineVolume(audioName, fineVolume) {
+    const audioFile = if_octane_fetch_audio_file(audioName);
+    audioFile.fineVolume = fineVolume;
+}
+
 function playAudioFromObject(audioObject) {
     if (if_octane_audio_context.state === "suspended") {
         if_octane_audio_context.resume();
@@ -317,9 +318,16 @@ function playAudioFromObject(audioObject) {
 
     if (audioObject === undefined) return 0;
 
-    if (!audioObject.isSilence) return 0;
+    if (audioObject.isSilence) return 0;
 
     let tailEnd = audioObject.source;
+
+    if (audioObject.audioFile.fineVolume) {
+        // If the audio file has fine volume, then apply it here.
+        const fineGain = if_octane_audio_context.createGain();
+        fineGain.gain.value = audioObject.audioFile.fineVolume;
+        tailEnd = tailEnd.connect(fineGain);
+    }
 
     if (
         audioObject.channel != AUDIO_CHANNEL_UI &&
@@ -615,11 +623,19 @@ const if_octane_foreground_channel = new AudioChannel(1.0);
 const if_octane_background_channel = new AudioChannel(0.75);
 const if_octane_music_channel = new AudioChannel(0.5);
 
+var if_octane_primary_default_sound = undefined;
+var if_octane_current_default_sound = undefined;
+
+function if_octane_arm_default_sound(audioName) {
+    if_octane_current_default_sound = audioName;
+}
+
 // This gets called when changing between locations different enough to
 // change how audio is perceived. In simpler situations, this is called
 // when moving from one room to another.
 function if_octane_arm_new_background_environment(environmentAudioProfile) {
     if_octane_background_channel.forceNewEnvironment = true;
+    //TODO: Use information in the profile to inform how effects will be applied.
 }
 
 function if_octane_sync_background_audio(audioObjectList) {

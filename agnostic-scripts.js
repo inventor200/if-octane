@@ -162,8 +162,22 @@ function doOnReadyAfter(lookID, readyFunc, funcID) {
     if_octane_insertReady(1, lookID, readyFunc, funcID);
 }
 
+// Resource-loading routines are simpler:
+const if_octane_resource_loading_functions = [];
+
+function handleResourcesWith(resFunc) {
+    if_octane_resource_loading_functions.push(resFunc);
+}
+
 // This runs on program start.
 function if_octane_doReady() {
+    if (IF_OCTANE_USING_EMBEDDING) {
+        for (let i = 0; i < if_octane_resource_loading_functions.length; i++) {
+            const resFunc = if_octane_resource_loading_functions[i]
+            resFunc();
+        }
+    }
+    
     printCredits();
 
     for (let i = 0; i < if_octane_ready_functions.length; i++) {

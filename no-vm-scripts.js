@@ -21,6 +21,9 @@ const if_octane_foreground_channel = new FakeAudioChannel(1.0);
 const if_octane_background_channel = new FakeAudioChannel(0.75);
 const if_octane_music_channel = new FakeAudioChannel(0.5);
 
+var if_octane_primary_default_sound = undefined;
+var if_octane_current_default_sound = undefined;
+
 const AUDIO_SILENCE = 'octane-core/silence';
 
 function if_octane_fallback_no_media_error() {
@@ -46,6 +49,10 @@ function setAudioRandomFrequency(audioName, randomFrequency) {
 }
 
 function setAudioLoopStatus(audioName, isLoop) {
+    if_octane_fallback_no_media_error();
+}
+
+function setAudioFineVolume(audioName, fineVolume) {
     if_octane_fallback_no_media_error();
 }
 

@@ -70,11 +70,18 @@ class LiveRegionManager {
             if_octane_sync_background_audio(unlimitedSounds);
 
             if (limitedSounds.length > 0) {
-                queuedForegroundSounds = true;
-                if (limitedSounds[limitedSounds.length - 1].isSilence) {
-                    foregroundIsSilence = true;
+                // Check for silence in foreground, which will cancel
+                // all other sounds.
+                for (let i = 0; i < limitedSounds.length; i++) {
+                    if (limitedSounds[i].isSilence) {
+                        foregroundIsSilence = true;
+                        break;
+                    }
                 }
-                else {
+
+                if (!foregroundIsSilence) {
+                    queuedForegroundSounds = true;
+
                     // Remove repeated sounds
                     let lastBuffer = undefined;
                     for (let i = 0; i < limitedSounds.length; i++) {
@@ -121,25 +128,28 @@ class LiveRegionManager {
         }
 
         if (!queuedForegroundSounds) {
-            //TODO: Add default sound
+            // Add default sound
+            if (!if_octane_current_default_sound && if_octane_primary_default_sound) {
+                if_octane_current_default_sound = if_octane_primary_default_sound;
+            }
+            if (if_octane_current_default_sound) {
+                this.audioQueue.push(createAudioObject(
+                    if_octane_current_default_sound, AUDIO_CHANNEL_UI
+                ));
+            }
         }
 
-        if (foregroundIsSilence) {
-            // We are forcing the foreground to be silent,
-            // so clear the audio queue.
-            this.audioQueue = [];
-        }
-        else {
-            // There will always be a foreground sound,
-            // so reload this channel every time.
-            if_octane_foreground_channel.reload();
-        }
+        // There will always be a foreground sound,
+        // so reload this channel every time.
+        if_octane_foreground_channel.reload();
 
         // Handle the screen reader announcement div
         if (!this.announcementPacket) return;
 
         this.announcementPacket.remove();
         this.announcementPacket = undefined;
+
+        if_octane_current_default_sound = if_octane_primary_default_sound;
     }
 
     addMessage(str, msgType=ANNOUNCEMENT_TYPE_TEXT) {
@@ -156,15 +166,23 @@ class LiveRegionManager {
         // Audio clips always play before anything else
         if (msgType === ANNOUNCEMENT_TYPE_AUDIO && dest.length > 0) {
             if (IF_OCTANE_USING_EMBEDDING) {
-                for (let i = 0; i < dest.length; i++) {
-                    const currentType = dest[i].type;
-                    if (currentType === ANNOUNCEMENT_TYPE_AUDIO) continue;
-                    dest.insert(i, newMsg);
-                    break;
+                if (dest[dest.length - 1].type === ANNOUNCEMENT_TYPE_AUDIO) {
+                    // No text content yet; just slap it onto the end
+                    dest.push(newMsg);
+                }
+                else {
+                    // We need to put it before the text content
+                    for (let i = 0; i < dest.length; i++) {
+                        const currentType = dest[i].type;
+                        if (currentType === ANNOUNCEMENT_TYPE_AUDIO) continue;
+                        dest.insert(i, newMsg);
+                        break;
+                    }
                 }
             }
         }
-        else {
+        // If we cannot do embedding, then skip audio pushes
+        else if (msgType != ANNOUNCEMENT_TYPE_AUDIO || IF_OCTANE_USING_EMBEDDING) {
             dest.push(newMsg);
         }
     }
