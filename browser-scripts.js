@@ -49,6 +49,9 @@ class LiveRegionManager {
             this.audioQueue.push(this.mainBuffer.shift().content);
         }
 
+        let queuedForegroundSounds = false;
+        let foregroundIsSilence = false;
+
         if (this.audioQueue.length > 0) {
             const limitedSounds = [];
             const unlimitedSounds = [];
@@ -66,39 +69,68 @@ class LiveRegionManager {
             if_octane_sync_background_audio(unlimitedSounds);
 
             if (limitedSounds.length > 0) {
-                // Sort limited sounds
-                for (let i = 0; i < limitedSounds.length; i++) {
-                    limitedSounds[i].playOrder = i;
+                queuedForegroundSounds = true;
+                if (limitedSounds[limitedSounds.length - 1].isSilence) {
+                    foregroundIsSilence = true;
                 }
+                else {
+                    // Remove repeated sounds
+                    let lastBuffer = undefined;
+                    for (let i = 0; i < limitedSounds.length; i++) {
+                        const currentBuffer = limitedSounds[i].audioFile.buffer;
+                        if (lastBuffer === currentBuffer) {
+                            limitedSounds.splice(i, 1);
+                            i--;
+                        }
+                        else {
+                            lastBuffer = currentBuffer;
+                        }
+                    }
 
-                limitedSounds.sort((a, b) => a.getPriority() - b.getPriority());
-                const survivingSounds = [];
+                    // Sort limited sounds
+                    for (let i = 0; i < limitedSounds.length; i++) {
+                        limitedSounds[i].playOrder = i;
+                    }
 
-                // Announcements cannot be delayed more than 3 seconds
-                // for accessibility reasons.
-                let totalDuration = 0;
-                while (totalDuration < 3.0 && limitedSounds.length > 0) {
-                    const survivingSound = limitedSounds.shift();
-                    survivingSounds.push(survivingSound);
+                    limitedSounds.sort((a, b) => a.getPriority() - b.getPriority());
+                    const survivingSounds = [];
 
-                    // If a sound has a long tail or something, then
-                    // we're gonna assume the important content appears
-                    // within one second.
-                    let simpleDuration = survivingSound.audioFile.buffer.duration;
-                    if (simpleDuration > 1.0) simpleDuration = 1.0;
-                    totalDuration += simpleDuration;
+                    // Announcements cannot be delayed more than 3 seconds
+                    // for accessibility reasons.
+                    let totalDuration = 0;
+                    while (totalDuration < 3.0 && limitedSounds.length > 0) {
+                        const survivingSound = limitedSounds.shift();
+                        survivingSounds.push(survivingSound);
+
+                        // If a sound has a long tail or something, then
+                        // we're gonna assume the important content appears
+                        // within one second.
+                        let simpleDuration = survivingSound.audioFile.buffer.duration;
+                        if (simpleDuration > 1.0) simpleDuration = 1.0;
+                        totalDuration += simpleDuration;
+                    }
+
+                    survivingSounds.sort((a, b) => a.playOrder - b.playOrder);
+
+                    this.audioQueue = survivingSounds;
                 }
-
-                survivingSounds.sort((a, b) => a.playOrder - b.playOrder);
-
-                this.audioQueue = survivingSounds;
             }
         }
-        else {
+
+        if (!queuedForegroundSounds) {
             //TODO: Add default sound
         }
 
-        if_octane_foreground_channel.reload();
+        if (foregroundIsSilence) {
+            // We are forcing the foreground to be silent,
+            // so clear the audio queue.
+            this.audioQueue = [];
+        }
+        else {
+            // There will always be a foreground sound,
+            // so reload this channel every time.
+            if_octane_foreground_channel.reload();
+        }
 
         // Handle the screen reader announcement div
         if (!this.announcementPacket) return;
@@ -120,11 +152,13 @@ class LiveRegionManager {
 
         // Audio clips always play before anything else
         if (msgType === ANNOUNCEMENT_TYPE_AUDIO && dest.length > 0) {
-            for (let i = 0; i < dest.length; i++) {
-                const currentType = dest[i].type;
-                if (currentType === ANNOUNCEMENT_TYPE_AUDIO) continue;
-                dest.insert(i, newMsg);
-                break;
+            if (IF_OCTANE_USING_EMBEDDING) {
+                for (let i = 0; i < dest.length; i++) {
+                    const currentType = dest[i].type;
+                    if (currentType === ANNOUNCEMENT_TYPE_AUDIO) continue;
+                    dest.insert(i, newMsg);
+                    break;
+                }
             }
         }
         else {
@@ -270,6 +304,7 @@ function queueAnnouncement(message) {
 }
 
 function queueSFX(audioObject) {
+    if (!IF_OCTANE_USING_EMBEDDING) return;
     announcementManager.addMessage(audioObject, ANNOUNCEMENT_TYPE_AUDIO);
 }
 

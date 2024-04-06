@@ -223,7 +223,14 @@ const AUDIO_CHANNEL_FOREGROUND = 1;
 const AUDIO_CHANNEL_BACKGROUND = 2;
 const AUDIO_CHANNEL_MUSIC = 3;
 
+const AUDIO_SILENCE = 'octane-core/silence';
+
 function if_octane_fetch_audio_file(audioName) {
+    if (audioName === AUDIO_SILENCE) {
+        console.error('Attempted to fetch silence!');
+        return undefined;
+    }
+
     for (let i = 0; i < if_octane_loaded_audio_files.length; i++) {
         const audioFile = if_octane_loaded_audio_files[i];
         if (audioName != audioFile.name) continue;
@@ -238,6 +245,27 @@ function if_octane_fetch_audio_file(audioName) {
 }
 
 function createAudioObject(audioName, channel=AUDIO_CHANNEL_UI) {
+    if (audioName === AUDIO_SILENCE) {
+        return {
+            isSilence: true,
+            audioFile: undefined,
+            source: undefined,
+            channel: channel,
+            faderGroup: undefined,
+            connectionTail: undefined,
+            priorityOffset: 0,
+            getPriority: function() {
+                return 0;
+            },
+            isLoop: function() {
+                return false;
+            },
+            randomFrequency: function() {
+                return 1.0;
+            }
+        };
+    }
+
     const audioFile = if_octane_fetch_audio_file(audioName);
 
     if (audioFile === undefined) return undefined;
@@ -249,9 +277,19 @@ function createAudioObject(audioName, channel=AUDIO_CHANNEL_UI) {
         audioFile: audioFile,
         source: source,
         channel: channel,
+        faderGroup: undefined,
+        connectionTail: undefined,
         priorityOffset: 0,
         getPriority: function() {
             return audioFile.priority + this.priorityOffset;
+        },
+        isLoop: function() {
+            // Forcefully do not allow UI and foreground audio to loop
+            if (channel <= AUDIO_CHANNEL_FOREGROUND) return false;
+            return audioFile.isLoop;
+        },
+        randomFrequency: function() {
+            return audioFile.randomFrequency;
         }
     };
 }
@@ -261,12 +299,25 @@ function setAudioPriority(audioName, priorityValue) {
     audioFile.priority = priorityValue;
 }
 
-function playAudioFromObject(audioObject) {
-    if (audioObject === undefined) return 0;
+function setAudioRandomFrequency(audioName, randomFrequency) {
+    const audioFile = if_octane_fetch_audio_file(audioName);
+    if (randomFrequency <= 0) randomFrequency = 1.0;
+    audioFile.randomFrequency = randomFrequency;
+}
 
+function setAudioLoopStatus(audioName, isLoop) {
+    const audioFile = if_octane_fetch_audio_file(audioName);
+    audioFile.isLoop = isLoop;
+}
+
+function playAudioFromObject(audioObject) {
     if (if_octane_audio_context.state === "suspended") {
         if_octane_audio_context.resume();
     }
+
+    if (audioObject === undefined) return 0;
+
+    if (!audioObject.isSilence) return 0;
 
     let tailEnd = audioObject.source;
 
@@ -274,7 +325,7 @@ function playAudioFromObject(audioObject) {
         audioObject.channel != AUDIO_CHANNEL_UI &&
         audioObject.channel != AUDIO_CHANNEL_MUSIC
     ) {
-        //TODO: Process audio effects
+        //TODO: Process environmental audio effects
     }
 
     if (audioObject.channel < AUDIO_CHANNEL_BACKGROUND) {
@@ -286,6 +337,8 @@ function playAudioFromObject(audioObject) {
     else {
         if_octane_background_channel.connect(audioObject, tailEnd);
     }
+
+    //TODO: Handle objects with isLoop
 
     audioObject.source.start();
 
@@ -307,6 +360,13 @@ class AudioFadeGroup {
         this.sources = [];
         this.hasFade = false;
         this.isStopped = false;
+    }
+
+    isFresh() {
+        if (this.isStopped) return false;
+        if (this.hasFade) return false;
+        if (this.sources.length > 0) return false;
+        return true;
     }
 }
 
@@ -332,64 +392,78 @@ class AudioChannel {
     }
 
     reload() {
-        this.faderGroups.push(new AudioFadeGroup(this.volumeController));
         this.sendToGC();
+        for (let i = 0; i < this.faderGroups.length; i++) {
+            const fader = this.faderGroups[i];
+            if (fader.isFresh()) {
+                // This fader group hasn't been utilized at all, so we
+                // can just move it to the end, instead of creating a new one.
+                this.faderGroups.splice(i, 1);
+                this.faderGroups.push(fader);
+                return;
+            }
+        }
+        this.faderGroups.push(new AudioFadeGroup(this.volumeController));
     }
 
-    fadeOut(batchObj) {
+    getNewFader() {
+        this.reload();
+        return this.getActiveFader();
+    }
+
+    fadeOut(batchObj, referenceNow) {
         const fader = batchObj.fader;
         if (fader.isStopped) return;
         if (fader.hasFade) return;
 
         fader.hasFade = true;
 
-        // Set the start time of the fade
-        fader.node.gain.setValueAtTime(
-            1.0, if_octane_audio_context.currentTime
-        );
+        if (!referenceNow) {
+            // Set the start time of the fade
+            fader.node.gain.setValueAtTime(
+                1.0, if_octane_audio_context.currentTime
+            );
+            referenceNow = if_octane_audio_context.currentTime;
+        }
+
         // Start the fade
         fader.node.gain.linearRampToValueAtTime(
-            0, if_octane_audio_context.currentTime + 0.5
+            0, referenceNow + 0.5
         );
 
         const _this = this;
         setTimeout(() => { _this.stop({
             fader: fader
         }); }, 500);
+
+        return referenceNow;
     }
 
-    fadeIn(batchObj) {
+    fadeIn(batchObj, referenceNow) {
         const fader = batchObj.fader;
         if (fader.isStopped) return;
         if (fader.hasFade) return;
 
-        // Set the start time of the fade
-        fader.node.gain.setValueAtTime(
-            0.0, if_octane_audio_context.currentTime
-        );
+        if (!referenceNow) {
+            // Set the start time of the fade
+            fader.node.gain.setValueAtTime(
+                0.0, if_octane_audio_context.currentTime
+            );
+            referenceNow = if_octane_audio_context.currentTime;
+        }
+
         // Start the fade
         fader.node.gain.linearRampToValueAtTime(
-            1.0, if_octane_audio_context.currentTime + 0.5
+            1.0, referenceNow + 0.5
         );
-    }
 
-    fadeOutAllExcept(batchObj) {
-        const fader = batchObj.fader;
-        for (let i = 0; i < this.faderGroups.length; i++) {
-            const grp = this.faderGroups[i];
-            if (fader === grp) continue;
-            this.fadeOut(grp);
-        }
-    }
-
-    fadeTransitionFor(batchObj) {
-        this.fadeOutAllExcept(batchObj);
-        this.fadeIn(batchObj);
+        return referenceNow;
     }
 
     stop(batchObj) {
         const fader = batchObj.fader;
         if (fader.isStopped) return;
+        fader.isStopped = true;
 
         const activeSources = fader.sources;
 
@@ -400,9 +474,100 @@ class AudioChannel {
         }
 
         fader.node.disconnect();
-        fader.isStopped = true;
 
         this.sendToGC();
+    }
+
+    syncPlayingSounds(audioObjectList) {
+        if (audioObjectList.length === 0) return;
+
+        const isSilence = audioObjectList[audioObjectList.length - 1].isSilence;
+
+        // Collect list of currently-active faders
+        const activeFaders = [];
+        for (let i = 0; i < this.faderGroups.length; i++) {
+            const fader = this.faderGroups[i];
+            if (fader.sources.length === 0) continue;
+            if (fader.isStopped) continue;
+            if (fader.hasFade) continue;
+            activeFaders.push(fader);
+        }
+
+        // Audio that gets transferred to the new fader
+        const preservedAudio = [];
+        // Audio that is brand-new
+        const newAudio = [];
+
+        if (!isSilence && activeFaders.length > 0) {
+            for (let i = 0; i < audioObjectList.length; i++) {
+                const incomingAudio = audioObjectList[i];
+                let foundMatch = false;
+                for (let j = 0; j < activeFaders.length; j++) {
+                    const compareFader = activeFaders[j];
+                    for (let k = 0; k < compareFader.sources.length; k++) {
+                        const compareSource = compareFader.sources[k];
+                        if (incomingAudio.audioFile.buffer != compareSource.audioFile.buffer) {
+                            // Already playing; move it to the new fader
+                            preservedAudio.push(incomingAudio);
+                            // Remove it from the old fader's list
+                            compareFader.sources.splice(k, 1);
+                            foundMatch = true;
+                            break;
+                        }
+                    }
+                    if (foundMatch) break;
+                }
+
+                if (!foundMatch) {
+                    // Not playing; add it to the new fader
+                    newAudio.push(incomingAudio);
+                }
+            }
+        }
+        else {
+            // All incoming audio is new
+            for (let i = 0; i < audioObjectList.length; i++) {
+                newAudio.push(audioObjectList[i]);
+            }
+        }
+
+        if (!isSilence) {
+            const preservedFader = this.getNewFader();
+
+            // Do the move
+            for (let i = 0; i < preservedAudio.length; i++) {
+                const audioObject = preservedAudio[i];
+                const tailEnd = audioObject.connectionTail;
+                tailEnd.disconnect();
+                preservedFader.connect(audioObject, tailEnd);
+            }
+        }
+
+        let newFader = undefined;
+        let referenceNow = undefined;
+        if (!isSilence && newAudio.length > 0) {
+            newFader = this.getNewFader();
+            // Set currentTime, and start the fade-in
+            newFader.node.gain.setValueAtTime(
+                0.0, if_octane_audio_context.currentTime
+            );
+            referenceNow = if_octane_audio_context.currentTime;
+        }
+
+        // Transition
+        for (let i = 0; i < activeFaders.length; i++) {
+            referenceNow = this.fadeOut({ fader: activeFaders[i] }, referenceNow);
+        }
+
+        if (newFader) {
+            // Add new audio
+            for (let i = 0; i < newAudio.length; i++) {
+                //TODO: Handle randomly-playing sounds
+                playAudioFromObject(newAudio[i]);
+            }
+
+            this.fadeIn({ fader: newFader }, referenceNow);
+        }
     }
 
     sendToGC() {
@@ -427,6 +592,8 @@ class AudioChannel {
         const active = this.getActiveFader();
         active.sources.push(audioObject.source);
         tailEnd.connect(active.node);
+        audioObject.connectionTail = tailEnd;
+        audioObject.faderGroup = active;
     }
 }
 
@@ -434,8 +601,47 @@ const if_octane_foreground_channel = new AudioChannel(1.0);
 const if_octane_background_channel = new AudioChannel(0.75);
 const if_octane_music_channel = new AudioChannel(0.5);
 
+//TODO: Create a standard silence audio for clearing background, music, and
+// for preventing default foreground audio.
 function if_octane_sync_background_audio(audioObjectList) {
     if (audioObjectList.length === 0) return;
 
-    //TODO: Transition background sfx and music
+    let backgroundToSilence = undefined;
+    const backgroundList = [];
+    let musicToSilence = undefined;
+    const musicList = [];
+
+    for (let i = 0; i < audioObjectList.length; i++) {
+        const obj = audioObjectList[i];
+        if (obj.isSilence) {
+            if (obj.channel === AUDIO_CHANNEL_BACKGROUND) {
+                backgroundToSilence = obj;
+            }
+            else {
+                musicToSilence = obj;
+            }
+            continue;
+        }
+
+        if (obj.channel === AUDIO_CHANNEL_BACKGROUND && !backgroundToSilence) {
+            backgroundList.push(obj);
+        }
+        else if (!musicToSilence) {
+            musicList.push(obj);
+        }
+    }
+
+    if (backgroundToSilence) {
+        if_octane_background_channel.syncPlayingSounds(backgroundToSilence);
+    }
+    else if (backgroundList.length > 0) {
+        if_octane_background_channel.syncPlayingSounds(backgroundList);
+    }
+
+    if (musicToSilence) {
+        if_octane_music_channel.syncPlayingSounds(musicToSilence);
+    }
+    else if (musicList.length > 0) {
+        if_octane_music_channel.syncPlayingSounds(musicList);
+    }
 }
