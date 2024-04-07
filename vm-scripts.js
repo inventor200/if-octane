@@ -638,6 +638,7 @@ function if_octane_arm_default_sound(audioName) {
 // change how audio is perceived. In simpler situations, this is called
 // when moving from one room to another.
 function if_octane_arm_new_background_environment(environmentAudioProfile) {
+    if_octane_background_environment_passed++;
     if_octane_background_channel.forceNewEnvironment = true;
     //TODO: Use information in the profile to inform how effects will be applied.
 }

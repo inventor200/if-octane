@@ -391,12 +391,7 @@ function sayLiteral(str) {
                 paragraphEl.appendChild(document.createElement('br'));
             }
             else if (chunk.isButton) {
-                if_octane_create_inline_button(
-                    chunk.title,
-                    chunk.parseActionText,
-                    chunk.parseAction,
-                    chunk.clickOnce
-                );
+                if_octane_create_inline_button(chunk.parseAction);
                 if_octane_inline_action_count++;
             }
             else if (
@@ -538,45 +533,59 @@ function printCredits() {
     if_octane_force_new_paragraph = true;
 }
 
-function if_octane_create_inline_button(tooltip, parseActionText, func, clickOnce=false) {
+function if_octane_create_inline_button(actionObject) {
     const paragraphEl = if_octane_get_last_paragraph();
-
     const button = document.createElement('button');
     paragraphEl.appendChild(button);
-    button.setAttribute("aria-label", clickOnce ? "single use" : "repeatable");
-    button.title = tooltip;
-    button.parseActionText = parseActionText;
-    button.isClickOnce = clickOnce;
-    button.className = clickOnce ? 'turn-action-button' : (
-        parseActionText.startsWith('x ') ? 'look-action-button' : 'free-action-button'
+    const buttonProfiles = [
+        {
+            label: "full action",
+            icon: "turn-action-button"
+        },
+        {
+            label: "free action",
+            icon: "free-action-button"
+        },
+        {
+            label: "check action",
+            icon: "look-action-button"
+        }
+    ];
+    const buttonProfile = (actionObject.getTurnCost() > 0) ? buttonProfiles[0] : (
+        actionObject.isExamineAction()
+            ? buttonProfiles[2] : buttonProfiles[1]
     );
-    button.hasBeenPressed = false;
+    button.setAttribute("aria-label", buttonProfile.label);
+    button.title = actionObject.tooltip;
+    button.isLocked = (actionObject.verify() != null);
+    button.className = buttonProfile.icon;
+    button.actionObject = actionObject;
+    button.backgroundEnvironmentOrigin = if_octane_background_environment_passed;
     button.addEventListener("click", function (e) {
         const _button = e.target;
-        const phrase = _button.parseActionText;
-        if (_button.isClickOnce) {
-            if (_button.hasBeenPressed) return;
-            if_octane_spend_button(_button, true);
-        }
-        _button.hasBeenPressed = true;
-        if_octane_start_new_turn(phrase);
-        func();
+        if (_button.isLocked) return;
+        if_octane_start_new_turn(_button.actionObject);
+        _button.actionObject.execute();
         if_octane_end_new_turn();
     });
     return button;
 }
 
-function if_octane_spend_button(buttonElement, isSpent=false) {
+function if_octane_lock_button(buttonElement) {
+    if (buttonElement.isLocked) return;
+    buttonElement.isLocked = true;
     buttonElement.setAttribute("aria-disabled", "true");
-    if (isSpent) {
-        // Announce to screen readers that the button has been disabled.
-        announcementManager.addMessage("Action button has been spent.");
-    }
 }
 
-function if_octane_get_truncated_turn_header(action) {
+function if_octane_lock_button(buttonElement) {
+    if (!buttonElement.isLocked) return;
+    buttonElement.isLocked = false;
+    buttonElement.setAttribute("aria-disabled", "false");
+}
+
+function if_octane_get_truncated_turn_header(actionObject) {
     const maxLen = 40;
-    const actionParts = action.toLowerCase().split(' ');
+    const actionParts = actionObject.parsingText.toLowerCase().split(' ');
     let truncatedAction = actionParts[0];
     let truncatedLen = actionParts[0].length;
     let truncatedCount = 1;
@@ -588,20 +597,20 @@ function if_octane_get_truncated_turn_header(action) {
         truncatedLen = truncatedAction.length;
         truncatedCount++;
     }
-    if (truncatedLen < action.length) {
+    if (truncatedLen < actionObject.parsingText.length) {
         // ...
         truncatedAction += "\u2026";
     }
     let title = truncatedAction + " report";
 
     title =
-        "Turn " + String(if_octane_turn_counter) + " report, after \u201C" +
+        "Action " + String(if_octane_turn_counter) + " report, after \u201C" +
         truncatedAction + "\u201D";
 
     return title;
 }
 
-function if_octane_separate_turn_text(action) {
+function if_octane_separate_turn_text(actionObject, fromButton) {
     const newTranscript = document.createElement("div");
     newTranscript.className = "transcript-div";
     const spacer = document.getElementById("bottom-page-spacer");
@@ -610,7 +619,7 @@ function if_octane_separate_turn_text(action) {
     if_octane_output_element = newTranscript;
 
     const newHeader = document.createElement("h2");
-    newHeader.innerText = if_octane_get_truncated_turn_header(action);
+    newHeader.innerText = if_octane_get_truncated_turn_header(actionObject);
     newTranscript.appendChild(newHeader);
 
     const gotoLink = document.createElement("a");
@@ -625,7 +634,24 @@ function if_octane_separate_turn_text(action) {
         const prevSection = if_octane_report_sections[if_octane_report_sections.length - 1];
         prevSection.header.removeAttribute("id");
         prevSection.gotoLink.style.visibility = "visible";
+        //TODO: If fromButton, fill in the parser field with actionObject.parsingText
+        // to simulate an example parser input, which does the same thing.
+        //TODO: Also, announce to the screen reader what was typed in.
     }
+
+    // We can use these two strategies to reduce the number of button checks:
+    //TODO: If the section is from before the previous turn,
+    // remove the parser field and offered actions at the bottom, and then
+    // add a string which shows what the player had typed in.
+    // This is because we cannot modify what a screen reader might still be viewing,
+    // but the advance of a turn proves that the screen reader focus must be
+    // past some known point.
+
+    //TODO: For sections before the previous turn,
+    // if the player has changed location environments,
+    // (button.backgroundEnvironmentOrigin != if_octane_background_environment_passed)
+    // or is no longer within a context that a button was matched to,
+    // then remove the button.
 
     newHeader.id = IF_OCTANE_LATEST_REPORT_ID;
 
@@ -641,60 +667,47 @@ function if_octane_separate_turn_text(action) {
     if_octane_grouped_action_count = 0;
 }
 
+function if_octane_update_button_states() {
+    //TODO: For buttons which remain,
+    // parse their parsingText properties to find a resolved action.
+    // Store that into the cachedResolvedAction property.
+    // Update the state of the button, according to its feasibility,
+    // and make sure to update its title property to either show
+    // the actionObject's tooltip, or short verify reason.
+    // If the button does not have a registered origin context,
+    // set it now, using the resolved action.
+}
+
 var if_octane_has_explained_scrolling = false;
 
 function if_octane_end_new_turn() {
+    // Update button states
+    if_octane_update_button_states();
+
     // Read out turns stats
     const stats = [];
-    if (if_octane_paragraphs_count > 0) {
-        stats.push({
-            singular: 'paragraph',
-            plural: 'paragraphs',
-            count: if_octane_paragraphs_count
-        });
-    }
-    if (if_octane_inline_action_count > 0) {
-        stats.push({
-            singular: 'action control in text',
-            plural: 'action controls in text',
-            count: if_octane_inline_action_count
-        });
-    }
-    if (if_octane_grouped_action_count > 0) {
-        stats.push({
-            singular: 'action control at bottom',
-            plural: 'action controls at bottom',
-            count: if_octane_grouped_action_count
-        });
-    }
 
-    const readStat = function(stat) {
-        return String(stat.count) + ' ' + (
-            stat.count === 1 ? stat.singular : stat.plural
-        );
-    }
+    stats.push({
+        singular: 'paragraph',
+        plural: 'paragraphs',
+        count: if_octane_paragraphs_count
+    });
+    stats.push({
+        singular: 'action control in text',
+        plural: 'action controls in text',
+        count: if_octane_inline_action_count
+    });
+    stats.push({
+        singular: 'action control at bottom',
+        plural: 'action controls at bottom',
+        count: if_octane_grouped_action_count
+    });
 
     announcementManager.addMessage(
         "New content has been written below."
     );
 
-    //TODO: Create a generic lister
-    if (stats.length === 1) {
-        announcementManager.addMessage(
-            readStat(stats[0]) + "."
-        );
-    }
-    else if (stats.length === 2) {
-        announcementManager.addMessage(
-            readStat(stats[0]) + ", and " + readStat(stats[1]) + "."
-        );
-    }
-    else if (stats.length === 3) {
-        announcementManager.addMessage(
-            readStat(stats[0]) + ", " + readStat(stats[1]) +
-            ", and " + readStat(stats[2]) + "."
-        );
-    }
+    announcementManager.addMessage(getCountListString(stats));
 
     if (!if_octane_has_explained_scrolling) {
         if_octane_has_explained_scrolling = true;

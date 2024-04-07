@@ -98,6 +98,10 @@ function evaluateMessage(msg) {
     return if_octane_end_listening_to_output();
 }
 
+const IF_OCTANE_SIGNAL_EXECUTE = 0;
+const IF_OCTANE_SIGNAL_VERIFY = 1;
+const IF_OCTANE_SIGNAL_GET_TURN_COUNT = 2;
+
 var if_octane_turn_counter = 0;
 
 const if_octane_button_function_queue = [];
@@ -107,7 +111,32 @@ function armButton(func) {
 }
 
 function createParseAction(str) {
-    return () => { say('<.p>' + str); };
+    return {
+        parsingText: str,
+        canParse: true,
+        // This is all an interface, so we can cache actions
+        // and load custom ones at any time.
+        cachedResolvedAction: null,
+        isExamineAction: function() {
+            return this.parsingText.startsWith('x ');
+        },
+        getTurnCost: function() {
+            if (this.isExamineAction) return 0;
+            return 1;
+        },
+        verify: function() {
+            // Returning null means it passes.
+            // Otherwise it returns the following:
+            //{
+            //    shortReason: "too far away",
+            //    longReason: "The object is too far away!"
+            //}
+            return null;
+        },
+        execute: function() {
+            say('<.p>' + this.parsingText);
+        }
+    }
 }
 
 // Add a function to run on page ready
@@ -183,6 +212,8 @@ function if_octane_doReady() {
     for (let i = 0; i < if_octane_ready_functions.length; i++) {
         if_octane_ready_functions[i].code();
     }
+
+    if_octane_update_button_states();
 }
 
 // This is for processing output strings
@@ -271,6 +302,7 @@ function if_octane_process_say_string(str) {
         if (if_octane_cap_change_status === IF_OCTANE_CAP_CHANGE_DOWN) c = c.toLowerCase();
 
         let pushableChunk = undefined;
+        let nextPushableChunk = undefined;
 
         let lastChunk = paragraph.chunks[paragraph.chunks.length - 1];
         if (escaping) {
@@ -367,15 +399,10 @@ function if_octane_process_say_string(str) {
                 <# title > (title as action)
                 <# title | action >
                 <# title | * > (uses armed function from list)
-                <! ... > (click only once)
                 */
-                if (
-                    lowerTag.startsWith('#') ||
-                    lowerTag.startsWith('!')
-                ) {
+                if (lowerTag.startsWith('#')) {
                     const content = tagContent.substring(1);
                     const parts = content.split('|');
-                    let clickOnce = tagContent.startsWith('!');
                     
                     let title = parts[0].trim().toLowerCase();
                     let parseAction;
@@ -384,11 +411,6 @@ function if_octane_process_say_string(str) {
                     if (parts.length === 1) {
                         parseActionText = title.toLowerCase();
                         parseAction = createParseAction(title.toLowerCase());
-
-                        if (!clickOnce) {
-                            //TODO: Check the parse action text to see if it will be
-                            // a turn-spending action, and update clickOnce accordingly.
-                        }
                     }
                     else {
                         const potentialAction = parts[1].trim().toLowerCase();
@@ -399,21 +421,48 @@ function if_octane_process_say_string(str) {
                         else {
                             parseActionText = potentialAction;
                             parseAction = createParseAction(potentialAction);
-
-                            if (!clickOnce) {
-                                //TODO: Check the parse action text to see if it will be
-                                // a turn-spending action, and update clickOnce accordingly.
-                            }
                         }
                     }
 
-                    pushableChunk = {
+                    if (parseAction.parsingText === undefined) {
+                        parseAction.parsingText = parseActionText;
+                    }
+
+                    if (parseAction.tooltip === undefined) {
+                        parseAction.tooltip = title;
+                    }
+
+                    if (wasSpace) {
+                        pushableChunk = {
+                            isSpecial: true,
+                            isButton: true,
+                            parseAction: parseAction
+                        };
+                    }
+                    else {
+                        tagContentConversion = '\u00A0';
+
+                        nextPushableChunk = {
+                            isSpecial: true,
+                            isButton: true,
+                            parseAction: parseAction
+                        };
+                    }
+                }
+                // <@ item name>
+                else if (lowerTag.startsWith('@')) {
+                    const cappedContent = tagContent.substring(1).trim();
+                    const content = cappedContent.toLowerCase();
+                    const parseActionText = 'x ' + content;
+                    const parseAction = createParseAction(parseActionText);
+                    parseAction.tooltip = 'examine ' + content;
+
+                    tagContentConversion = cappedContent + '\u00A0';
+
+                    nextPushableChunk = {
                         isSpecial: true,
                         isButton: true,
-                        title: title,
-                        parseAction: parseAction,
-                        parseActionText: parseActionText,
-                        clickOnce: clickOnce
+                        parseAction: parseAction
                     };
                 }
             }
@@ -442,39 +491,46 @@ function if_octane_process_say_string(str) {
             continue;
         }
 
-        const hasVisiblePushableChunk = (pushableChunk && !pushableChunk.isBreak);
+        do {
+            const hasVisiblePushableChunk = (pushableChunk && !pushableChunk.isBreak);
 
-        const isSpace = (!hasVisiblePushableChunk && isWhitespace(c)) ||
-            (pushableChunk && pushableChunk.isBreak);
+            const isSpace = (!hasVisiblePushableChunk && isWhitespace(c)) ||
+                (pushableChunk && pushableChunk.isBreak);
 
-        if (!isSpace && if_octane_paragraph_break_status % 2 === 1) {
-            const newChunk = if_octane_create_empty_chunk(lastChunk);
-            paragraph = {
-                chunks: [newChunk]
-            };
-            paragraphs.push(paragraph);
-            lastChunk = newChunk;
-            if (!hasVisiblePushableChunk) {
-                if_octane_paragraph_break_status = IF_OCTANE_NO_PARAGRAPH_BREAK;
+            if (!isSpace && if_octane_paragraph_break_status % 2 === 1) {
+                const newChunk = if_octane_create_empty_chunk(lastChunk);
+                paragraph = {
+                    chunks: [newChunk]
+                };
+                paragraphs.push(paragraph);
+                lastChunk = newChunk;
+                if (!hasVisiblePushableChunk) {
+                    if_octane_paragraph_break_status = IF_OCTANE_NO_PARAGRAPH_BREAK;
+                }
+                if_octane_mark_output_listener();
             }
-            if_octane_mark_output_listener();
-        }
 
-        if (!isSpace) {
-            if_octane_cap_change_status = IF_OCTANE_NO_CAP_CHANGE;
-        }
+            if (!isSpace) {
+                if_octane_cap_change_status = IF_OCTANE_NO_CAP_CHANGE;
+            }
 
-        if (pushableChunk) {
-            const newChunk = if_octane_create_empty_chunk(lastChunk);
-            paragraph.chunks.push(pushableChunk);
-            paragraph.chunks.push(newChunk);
-        }
-        else if (!isSpace || !wasSpace) {
-            lastChunk.content += c;
-            if_octane_mark_output_listener();
-        }
+            if (pushableChunk) {
+                const newChunk = if_octane_create_empty_chunk(lastChunk);
+                paragraph.chunks.push(pushableChunk);
+                paragraph.chunks.push(newChunk);
+            }
+            else if (!isSpace || !wasSpace) {
+                lastChunk.content += c;
+                if_octane_mark_output_listener();
+            }
 
-        wasSpace = isSpace;
+            wasSpace = isSpace;
+            pushableChunk = undefined;
+            if (nextPushableChunk) {
+                pushableChunk = nextPushableChunk;
+                nextPushableChunk = undefined;
+            }
+        } while (pushableChunk);
     }
 
     if (escaping) {
@@ -520,8 +576,50 @@ function if_octane_say_room(str) {
     if_octane_say_follows_heading = true;
 }
 
-function if_octane_start_new_turn(action) {
+function if_octane_start_new_turn(actionObject, fromButton=false) {
     if_octane_turn_counter++;
-    if_octane_separate_turn_text(action);
+    if_octane_separate_turn_text(actionObject,
+        fromButton && (actionObject.canParse != undefined)
+    );
     if_octane_say_follows_heading = true;
 }
+
+function getListString(listObjects) {
+    if (listObjects.length === 0) return '';
+    if (listObjects.length === 1) return listObjects[0];
+    if (listObjects.length === 2) {
+        return listObjects[0] + ', and ' + listObjects[1];
+    }
+
+    let str = listObjects[0];
+    for (let i = 1; i < listObjects.length; i++) {
+        str += ', ';
+        if (i === listObjects.length - 1) {
+            str += ' and ';
+        }
+        str += listObjects[i];
+    }
+
+    return str;
+}
+
+function getCountListString(countListObjects, filterZeroes=true) {
+    const listObjects = [];
+    for (let i = 0; i < countListObjects.length; i++) {
+        const countObj = countListObjects[i];
+        if (countObj.count === 0 && filterZeroes) continue;
+        if (countObj.count === 1) {
+            listObjects.push(
+                String(countObj.count) + ' ' + countObj.singular
+            );
+        }
+        else {
+            listObjects.push(
+                String(countObj.count) + ' ' + countObj.plural
+            );
+        }
+    }
+    return getListString(listObjects);
+}
+
+var if_octane_background_environment_passed = 0;
