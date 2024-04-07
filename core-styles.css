@@ -153,28 +153,53 @@ h2 {
     display: block;
 }
 
-.action-button {
-    background: none!important;
-    border-width: 1px;
-    border-radius: 4px;
-    color: #006688;
-    font-weight: 900;
-    /*margin-left: 0.5em;
-    margin-right: 0.5em;*/
+.turn-action-button {
+    mask-image: url("data:image/svg+xml,%3C%3Fxml version='1.0' encoding='UTF-8'%3F%3E%3Csvg width='16' height='16' version='1.1' viewBox='0 0 4.2333 4.2333' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m0.26458 0.26458 3.175 1.5875v-1.5875h0.52917v3.7042h-0.52917v-1.5875l-3.175 1.5875z' fill='%23fff'/%3E%3C/svg%3E%0A");
 }
 
-.action-button:disabled,
-.action-button[disabled],
-.action-button[aria-disabled=true] {
-    color: #C2C1C0;
+.free-action-button {
+    mask-image: url("data:image/svg+xml,%3C%3Fxml version='1.0' encoding='UTF-8'%3F%3E%3Csvg width='16' height='16' version='1.1' viewBox='0 0 4.2333 4.2333' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m0.26458 0.26458 3.7042 1.8521-3.7042 1.8521z' fill='%23fff'/%3E%3C/svg%3E%0A");
 }
 
-.action-button:hover {
-    color: #660088;
+.look-action-button {
+    mask-image: url("data:image/svg+xml,%3C%3Fxml version='1.0' encoding='UTF-8'%3F%3E%3Csvg width='16' height='16' version='1.1' viewBox='0 0 4.2333 4.2333' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3CclipPath id='a'%3E%3Ccircle cx='1.5875' cy='1.5875' r='.79375' d='M 2.38125,1.5875 A 0.79374999,0.79374999 0 0 1 1.5875,2.38125 0.79374999,0.79374999 0 0 1 0.79374999,1.5875 0.79374999,0.79374999 0 0 1 1.5875,0.79374999 0.79374999,0.79374999 0 0 1 2.38125,1.5875 Z' display='none' fill='%23bebebe'/%3E%3Cpath class='powerclip' d='m-4.7354-4.7354h12.646v12.646h-12.646zm7.1167 6.3229a0.79375 0.79375 0 0 0-0.79375-0.79375 0.79375 0.79375 0 0 0-0.79375 0.79375 0.79375 0.79375 0 0 0 0.79375 0.79375 0.79375 0.79375 0 0 0 0.79375-0.79375z' fill='%23bebebe'/%3E%3C/clipPath%3E%3C/defs%3E%3Cg fill='%23fff'%3E%3Cpath d='m2.9104 1.5875a1.3229 1.3229 0 0 1-1.3229 1.3229 1.3229 1.3229 0 0 1-1.3229-1.3229 1.3229 1.3229 0 0 1 1.3229-1.3229 1.3229 1.3229 0 0 1 1.3229 1.3229z' clip-path='url(%23a)'/%3E%3Cpath d='m3.4396 3.9688 0.52917-0.52917-1.3229-1.3229-0.52917 0.52917z'/%3E%3C/g%3E%3C/svg%3E%0A");
 }
 
-.action-button:active {
-    color: black;
+.turn-action-button,
+.free-action-button,
+.look-action-button {
+    mask-repeat: no-repeat;
+    border-style: none;
+    border-radius: 0;
+    background-color: #006688;
+    padding-top: 14px;
+    padding-bottom: 14px;
+    padding-left: 0px;
+    padding-right: 16px;
+}
+
+.turn-action-button:disabled,
+.turn-action-button[disabled],
+.turn-action-button[aria-disabled=true],
+.free-action-button:disabled,
+.free-action-button[disabled],
+.free-action-button[aria-disabled=true],
+.look-action-button:disabled,
+.look-action-button[disabled],
+.look-action-button[aria-disabled=true] {
+    background-color: #C2C1C0;
+}
+
+.turn-action-button:hover,
+.free-action-button:hover,
+.look-action-button:hover {
+    background-color: #660088;
+}
+
+.turn-action-button:active,
+.free-action-button:active,
+.look-action-button:active {
+    background-color: black;
 }
 
 a:link, a:hover, a.latest-link:visited {
@@ -226,8 +251,34 @@ a:active {
         background-color: black;
     }
 
-    .action-button {
-        color: #00AAFF;
+    .turn-action-button,
+    .free-action-button,
+    .look-action-button {
+        background-color: #00AAFF;
+    }
+
+    .turn-action-button:disabled,
+    .turn-action-button[disabled],
+    .turn-action-button[aria-disabled=true],
+    .free-action-button:disabled,
+    .free-action-button[disabled],
+    .free-action-button[aria-disabled=true],
+    .look-action-button:disabled,
+    .look-action-button[disabled],
+    .look-action-button[aria-disabled=true] {
+        background-color: #202122;
+    }
+
+    .turn-action-button:hover,
+    .free-action-button:hover,
+    .look-action-button:hover {
+        background-color: #AA00FF;
+    }
+    
+    .turn-action-button:active,
+    .free-action-button:active,
+    .look-action-button:active {
+        background-color: white;
     }
 
     a:link, a:hover, a.latest-link:visited {
@@ -238,20 +289,6 @@ a:active {
     }
     a:active {
         color: #66AAFF;
-    }
-
-    .action-button:disabled,
-    .action-button[disabled],
-    .action-button[aria-disabled=true] {
-        color: #202122;
-    }
-
-    .action-button:hover {
-        color: #AA00FF;
-    }
-    
-    .action-button:active {
-        color: white;
     }
 
     #game-container {

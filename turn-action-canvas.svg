@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="16"
+   height="16"
+   viewBox="0 0 4.2333332 4.2333333"
+   version="1.1"
+   id="svg5"
+   inkscape:version="1.2 (dc2aeda, 2022-05-15)"
+   sodipodi:docname="turn-action-canvas.svg"
+   inkscape:export-filename="action.svg"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview7"
+     pagecolor="#505050"
+     bordercolor="#ffffff"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="1"
+     inkscape:deskcolor="#505050"
+     inkscape:document-units="mm"
+     showgrid="true"
+     inkscape:zoom="44.984512"
+     inkscape:cx="5.6019281"
+     inkscape:cy="7.4247777"
+     inkscape:window-width="1920"
+     inkscape:window-height="982"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1"
+     showguides="true">
+    <inkscape:grid
+       type="xygrid"
+       id="grid132"
+       empspacing="1"
+       originx="0"
+       originy="0" />
+    <sodipodi:guide
+       position="3.4395832,1.8520833"
+       orientation="1,0"
+       id="guide1679"
+       inkscape:locked="false" />
+    <sodipodi:guide
+       position="3.4395832,2.38125"
+       orientation="0,-1"
+       id="guide1681"
+       inkscape:locked="false" />
+    <sodipodi:guide
+       position="3.7041665,1.8520833"
+       orientation="0,-1"
+       id="guide1683"
+       inkscape:locked="false" />
+  </sodipodi:namedview>
+  <defs
+     id="defs2" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <path
+       style="fill:#ffffff;stroke:none;stroke-width:0.264583px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;fill-opacity:1"
+       d="M 0.26458333,0.26458333 3.4395833,1.8520833 V 0.26458333 H 3.96875 V 3.96875 H 3.4395833 v -1.5875 l -3.17499997,1.5875 z"
+       id="path1685" />
+  </g>
+</svg>

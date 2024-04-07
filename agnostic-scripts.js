@@ -375,21 +375,35 @@ function if_octane_process_say_string(str) {
                 ) {
                     const content = tagContent.substring(1);
                     const parts = content.split('|');
-                    const clickOnce = tagContent.startsWith('!');
+                    let clickOnce = tagContent.startsWith('!');
                     
                     let title = parts[0].trim().toLowerCase();
                     let parseAction;
+                    let parseActionText;
 
                     if (parts.length === 1) {
+                        parseActionText = title.toLowerCase();
                         parseAction = createParseAction(title.toLowerCase());
+
+                        if (!clickOnce) {
+                            //TODO: Check the parse action text to see if it will be
+                            // a turn-spending action, and update clickOnce accordingly.
+                        }
                     }
                     else {
                         const potentialAction = parts[1].trim().toLowerCase();
                         if (potentialAction === "*") {
+                            parseActionText = title.toLowerCase();
                             parseAction = if_octane_button_function_queue.shift();
                         }
                         else {
+                            parseActionText = potentialAction;
                             parseAction = createParseAction(potentialAction);
+
+                            if (!clickOnce) {
+                                //TODO: Check the parse action text to see if it will be
+                                // a turn-spending action, and update clickOnce accordingly.
+                            }
                         }
                     }
 
@@ -398,6 +412,7 @@ function if_octane_process_say_string(str) {
                         isButton: true,
                         title: title,
                         parseAction: parseAction,
+                        parseActionText,
                         clickOnce: clickOnce
                     };
                 }

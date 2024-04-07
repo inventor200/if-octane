@@ -152,6 +152,7 @@ echo '<meta name="viewport" content="width=device-width,initial-scale=1">' >> "$
 echo "<title>$PROJ_TITLE</title>" >> "$PREDOC_NAME"
 echo "<meta property="ifiction:ifid" content=\"$PROJ_IFID\">" >> "$PREDOC_NAME"
 echo "<meta name=\"darkreader-lock\">" >> "$PREDOC_NAME"
+cat "$IF_OCTANE_ENGINE_PATH/favicon-code.txt" >> "$PREDOC_NAME"
 
 BUILT_CSS="$IF_OCTANE_ENGINE_PATH/cache/clean-styles"
 cat "$IF_OCTANE_ENGINE_PATH/core-styles.css" > "$BUILT_CSS.css"

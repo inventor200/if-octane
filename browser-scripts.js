@@ -393,6 +393,7 @@ function sayLiteral(str) {
             else if (chunk.isButton) {
                 if_octane_create_inline_button(
                     chunk.title,
+                    chunk.parseActionText,
                     chunk.parseAction,
                     chunk.clickOnce
                 );
@@ -537,20 +538,22 @@ function printCredits() {
     if_octane_force_new_paragraph = true;
 }
 
-function if_octane_create_inline_button(tooltip, func, clickOnce=false) {
+function if_octane_create_inline_button(tooltip, parseActionText, func, clickOnce=false) {
     const paragraphEl = if_octane_get_last_paragraph();
 
     const button = document.createElement('button');
     paragraphEl.appendChild(button);
-    button.textContent = clickOnce ? "1" : "\u25B6";
     button.setAttribute("aria-label", clickOnce ? "single use" : "repeatable");
     button.title = tooltip;
+    button.parseActionText = parseActionText;
     button.isClickOnce = clickOnce;
-    button.className = 'action-button';
+    button.className = clickOnce ? 'turn-action-button' : (
+        parseActionText.startsWith('x ') ? 'look-action-button' : 'free-action-button'
+    );
     button.hasBeenPressed = false;
     button.addEventListener("click", function (e) {
         const _button = e.target;
-        const phrase = _button.title;
+        const phrase = _button.parseActionText;
         if (_button.isClickOnce) {
             if (_button.hasBeenPressed) return;
             if_octane_spend_button(_button, true);
