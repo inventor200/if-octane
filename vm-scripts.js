@@ -244,7 +244,7 @@ function if_octane_fetch_audio_file(audioName) {
     return undefined;
 }
 
-function createAudioObject(audioName, channel=AUDIO_CHANNEL_UI) {
+function createAudioObject(audioName, channel=AUDIO_CHANNEL_UI, distance=0, muffle=0) {
     if (audioName === AUDIO_SILENCE) {
         return {
             isSilence: true,
@@ -276,6 +276,8 @@ function createAudioObject(audioName, channel=AUDIO_CHANNEL_UI) {
         faderGroup: undefined,
         connectionTail: undefined,
         priorityOffset: 0,
+        distance: distance,
+        muffle: muffle,
         getPriority: function() {
             return audioFile.priority + this.priorityOffset;
         },
@@ -333,7 +335,9 @@ function playAudioFromObject(audioObject) {
         audioObject.channel != AUDIO_CHANNEL_UI &&
         audioObject.channel != AUDIO_CHANNEL_MUSIC
     ) {
-        //TODO: Process environmental audio effects
+        //TODO: Process environmental audio effects.
+        // Note to use the distance and muffle properties of the audioObject,
+        // as well as any effects from the environment!
     }
 
     if (audioObject.channel < AUDIO_CHANNEL_BACKGROUND) {
