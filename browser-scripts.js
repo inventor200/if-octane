@@ -537,50 +537,79 @@ function if_octane_create_inline_button(actionObject) {
     const paragraphEl = if_octane_get_last_paragraph();
     const button = document.createElement('button');
     paragraphEl.appendChild(button);
-    const buttonProfiles = [
-        {
-            label: "full action",
-            icon: "turn-action-button"
-        },
-        {
-            label: "free action",
-            icon: "free-action-button"
-        },
-        {
-            label: "check action",
-            icon: "look-action-button"
-        }
-    ];
-    const buttonProfile = (actionObject.getTurnCost() > 0) ? buttonProfiles[0] : (
-        actionObject.isExamineAction()
-            ? buttonProfiles[2] : buttonProfiles[1]
-    );
-    button.setAttribute("aria-label", buttonProfile.label);
-    button.title = actionObject.tooltip;
-    button.isLocked = (actionObject.verify() != null);
-    button.className = buttonProfile.icon;
     button.actionObject = actionObject;
-    button.backgroundEnvironmentOrigin = if_octane_background_environment_passed;
+
+    if_octane_format_button(button);
+
     button.addEventListener("click", function (e) {
         const _button = e.target;
-        if (_button.isLocked) return;
+        if (_button.isLocked) {
+            if_octane_start_new_turn(_button.actionObject);
+            if_octane_arm_default_sound(if_octane_fail_default_sound);
+            say(_button.verifyReason);
+            if_octane_end_new_turn();
+            return;
+        }
         if_octane_start_new_turn(_button.actionObject);
         _button.actionObject.execute();
         if_octane_end_new_turn();
     });
+
+    const prevSection = if_octane_report_sections[if_octane_report_sections.length - 1];
+    prevSection.buttonList.push(button);
     return button;
 }
 
-function if_octane_lock_button(buttonElement) {
-    if (buttonElement.isLocked) return;
-    buttonElement.isLocked = true;
-    buttonElement.setAttribute("aria-disabled", "true");
-}
+function if_octane_format_button(button) {
+    const actionObject = button.actionObject;
 
-function if_octane_lock_button(buttonElement) {
-    if (!buttonElement.isLocked) return;
-    buttonElement.isLocked = false;
-    buttonElement.setAttribute("aria-disabled", "false");
+    if (actionObject.resolveReferences != undefined) {
+        actionObject.resolveReferences();
+    }
+
+    const buttonProfiles = [
+        {
+            index: 0,
+            label: "full action",
+            icon: "turn-action-button"
+        },
+        {
+            index: 1,
+            label: "free action",
+            icon: "free-action-button"
+        },
+        {
+            index: 2,
+            label: "check action",
+            icon: "look-action-button"
+        }
+    ];
+    let _isExamineAction = false;
+    if (actionObject.isExamineAction != undefined) {
+        _isExamineAction = actionObject.isExamineAction();
+    }
+    const buttonProfile = (actionObject.getTurnCost() > 0) ? buttonProfiles[0] : (
+        _isExamineAction ? buttonProfiles[2] : buttonProfiles[1]
+    );
+    const verifyReason = actionObject.verify();
+    const isLocked = (verifyReason != null);
+
+    button.verifyReason = (verifyReason === null) ? "" : verifyReason;
+
+    if (button.buttonProfileIndex != buttonProfile.index) {
+        button.buttonProfileIndex = buttonProfile.index;
+        button.setAttribute("aria-label", buttonProfile.label);
+        button.className = buttonProfile.icon;
+    }
+
+    if (button.isLocked != isLocked) {
+        button.isLocked = isLocked;
+        button.setAttribute("aria-disabled", isLocked ? "true" : "false");
+    }
+
+    if (button.title != actionObject.tooltip) {
+        button.title = actionObject.tooltip;
+    }
 }
 
 function if_octane_get_truncated_turn_header(actionObject) {
@@ -610,6 +639,20 @@ function if_octane_get_truncated_turn_header(actionObject) {
     return title;
 }
 
+const IF_OCTANE_MAX_SECTION_ACTIVITY_DECAY = 4;
+const IF_OCTANE_INIT_SECTION_ACTIVITY_SCORE = 8;
+
+function if_octane_declare_first_transcript() {
+    if_octane_report_sections.push({
+        index: 0,
+        transcriptDiv: document.getElementById("init-transcript-area"),
+        backgroundEnvironmentOrigin: if_octane_background_environments_passed,
+        turnNumber: if_octane_turn_counter,
+        activityScore: IF_OCTANE_INIT_SECTION_ACTIVITY_SCORE,
+        buttonList: []
+    });
+}
+
 function if_octane_separate_turn_text(actionObject, fromButton) {
     const newTranscript = document.createElement("div");
     newTranscript.className = "transcript-div";
@@ -630,13 +673,20 @@ function if_octane_separate_turn_text(actionObject, fromButton) {
     newTranscript.appendChild(gotoLink);
 
     // Set the latest section element to not be the latest anymore
-    if (if_octane_report_sections.length > 0) {
-        const prevSection = if_octane_report_sections[if_octane_report_sections.length - 1];
+    const prevSection = if_octane_report_sections[if_octane_report_sections.length - 1];
+    if (prevSection.header) {
         prevSection.header.removeAttribute("id");
+    }
+    if (prevSection.gotoLink) {
         prevSection.gotoLink.style.visibility = "visible";
-        //TODO: If fromButton, fill in the parser field with actionObject.parsingText
+    }
+
+    if (fromButton) {
+        //TODO: Fill in the parser field with actionObject.parsingText
         // to simulate an example parser input, which does the same thing.
         //TODO: Also, announce to the screen reader what was typed in.
+        // (Unless all buttons are above the parser, in which case we
+        // could just pop an on-screen message there without being weird?)
     }
 
     // We can use these two strategies to reduce the number of button checks:
@@ -649,16 +699,28 @@ function if_octane_separate_turn_text(actionObject, fromButton) {
 
     //TODO: For sections before the previous turn,
     // if the player has changed location environments,
-    // (button.backgroundEnvironmentOrigin != if_octane_background_environment_passed)
+    // (section.backgroundEnvironmentOrigin != if_octane_background_environments_passed)
     // or is no longer within a context that a button was matched to,
     // then remove the button.
 
+    //TODO: When using a button in a section, add to the section's activity.
+    // Sections that have an activity score above some number are safe from UI
+    // tampering. This is to help screen readers pushing buttons in older sections,
+    // which might be immediately modified.
+
     newHeader.id = IF_OCTANE_LATEST_REPORT_ID;
 
+    const newIndex = if_octane_report_sections.length;
+
     if_octane_report_sections.push({
+        index: newIndex,
         header: newHeader,
         gotoLink: gotoLink,
-        transcriptDiv: newTranscript
+        transcriptDiv: newTranscript,
+        backgroundEnvironmentOrigin: if_octane_background_environments_passed,
+        turnNumber: if_octane_turn_counter,
+        activityScore: IF_OCTANE_INIT_SECTION_ACTIVITY_SCORE,
+        buttonList: []
     });
 
     // Reset new turn report announcements
@@ -667,15 +729,56 @@ function if_octane_separate_turn_text(actionObject, fromButton) {
     if_octane_grouped_action_count = 0;
 }
 
+function if_octane_bump_activity(startIndex) {
+    for (let i = startIndex; i < if_octane_report_sections.length; i++) {
+        const section = if_octane_report_sections[i];
+        let nextScore = section.activityScore + IF_OCTANE_MAX_SECTION_ACTIVITY_DECAY;
+        if (nextScore > IF_OCTANE_INIT_SECTION_ACTIVITY_SCORE) {
+            nextScore = IF_OCTANE_INIT_SECTION_ACTIVITY_SCORE;
+        }
+        if (section.activityScore < 0) {
+            section.activityScore = IF_OCTANE_MAX_SECTION_ACTIVITY_DECAY;
+        }
+        else {
+            section.activityScore = nextScore;
+        }
+    }
+}
+
 function if_octane_update_button_states() {
-    //TODO: For buttons which remain,
-    // parse their parsingText properties to find a resolved action.
-    // Store that into the cachedResolvedAction property.
-    // Update the state of the button, according to its feasibility,
-    // and make sure to update its title property to either show
-    // the actionObject's tooltip, or short verify reason.
-    // If the button does not have a registered origin context,
-    // set it now, using the resolved action.
+    for (let i = 0; i < if_octane_report_sections.length - 1; i++) {
+        const section = if_octane_report_sections[i];
+
+        // Activity decay
+        if (section.activityScore >= 0) {
+            let environmentOffset =
+                if_octane_background_environments_passed
+                - section.backgroundEnvironmentOrigin;
+            if (environmentOffset > IF_OCTANE_MAX_SECTION_ACTIVITY_DECAY) {
+                environmentOffset = IF_OCTANE_MAX_SECTION_ACTIVITY_DECAY;
+            }
+            if (environmentOffset < 0) environmentOffset = 1;
+            section.activityScore -= environmentOffset;
+            if (section.activityScore < -1) section.activityScore = -1;
+        }
+    }
+
+    for (let i = 0; i < if_octane_report_sections.length; i++) {
+        const section = if_octane_report_sections[i];
+
+        if (section.activityScore < 0) {
+            // Delete buttons, once aged-out
+            while (section.buttonList.length > 0) {
+                section.buttonList.shift().remove();
+            }
+        }
+        else {
+            // Update state
+            for (let j = 0; j < section.buttonList.length; j++) {
+                if_octane_format_button(section.buttonList[j]);
+            }
+        }
+    }
 }
 
 var if_octane_has_explained_scrolling = false;

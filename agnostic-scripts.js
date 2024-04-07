@@ -110,31 +110,74 @@ function armButton(func) {
     if_octane_button_function_queue.push(func);
 }
 
-function createParseAction(str) {
+//TODO: Implement a method for generating context-ful inline action tags.
+
+function if_octane_get_object_from_id(id) {
+    //TODO: implement, once the world model supports it.
+    return undefined;
+}
+
+function if_octane_build_context_info_object(inlineString) {
+    const series = inlineString.trim().toLowerCase().split(',');
+    const outObj = {};
+    for (let i = 0; i < series.length; i++) {
+        const pair = series[i].trim().split('=');
+        if (pair.length != 2) {
+            console.error(
+                "Bad inline action context pair: \"" +
+                series[i].trim() + "\" in \"" + inlineString + "\""
+            );
+            return undefined;
+        }
+        const key = pair[0].trim();
+        const id = parseInt(pair[1].trim());
+        outObj[key] = if_octane_get_object_from_id(id);
+    }
+    return outObj;
+}
+
+function createParseActionObject(str, contextInfoObj) {
+    //TODO: Allow for nouns/objects/etc to be sent, and baked into the
+    // action info, in cases where a button was created for a specific
+    // and known interaction. This can save quite a lot on verification
+    // and processing.
     return {
         parsingText: str,
-        canParse: true,
+        canParse: true, // <- Indicate to other system that this came from text parsing.
         // This is all an interface, so we can cache actions
         // and load custom ones at any time.
+        contextInfoObj: contextInfoObj,
         cachedResolvedAction: null,
+        //TODO: Use the cachedResolvedAction for evaluating these
         isExamineAction: function() {
             return this.parsingText.startsWith('x ');
         },
         getTurnCost: function() {
-            if (this.isExamineAction) return 0;
+            if (this.isExamineAction === undefined) return 1;
+            if (this.isExamineAction()) return 0;
             return 1;
         },
         verify: function() {
             // Returning null means it passes.
-            // Otherwise it returns the following:
-            //{
-            //    shortReason: "too far away",
-            //    longReason: "The object is too far away!"
-            //}
+            // Otherwise it returns an explanation of why it's invalid.
             return null;
         },
         execute: function() {
             say('<.p>' + this.parsingText);
+        },
+        resolveReferences() {
+            if (this.cachedResolvedAction === undefined) {
+                // This must be a custom-built action.
+                // We can't do anything about this.
+                return;
+            }
+            if (this.cachedResolvedAction != null) {
+                // We already got the job done.
+                return;
+            }
+            //TODO: Figure out what action we must be referring to,
+            // and use any extra context in this.contextInfoObj to narrow it down.
+            // Once we have it, cache it in cachedResolvedAction
         }
     }
 }
@@ -206,6 +249,8 @@ function if_octane_doReady() {
             resFunc();
         }
     }
+
+    if_octane_declare_first_transcript();
     
     printCredits();
 
@@ -399,18 +444,29 @@ function if_octane_process_say_string(str) {
                 <# title > (title as action)
                 <# title | action >
                 <# title | * > (uses armed function from list)
+
+                Numbers are ID numbers, which are part of the world model:
+                <# title | action ? action=0,dobj=1,...>
                 */
                 if (lowerTag.startsWith('#')) {
-                    const content = tagContent.substring(1);
+                    const dataHalves = tagContent.substring(1).split('?');
+                    const content = dataHalves[0];
                     const parts = content.split('|');
                     
                     let title = parts[0].trim().toLowerCase();
                     let parseAction;
                     let parseActionText;
 
+                    let contextInfoObj = undefined;
+                    if (dataHalves.length > 1) {
+                        contextInfoObj = if_octane_build_context_info_object(dataHalves[1]);
+                    }
+
                     if (parts.length === 1) {
                         parseActionText = title.toLowerCase();
-                        parseAction = createParseAction(title.toLowerCase());
+                        parseAction = createParseActionObject(
+                            title.toLowerCase(), contextInfoObj
+                        );
                     }
                     else {
                         const potentialAction = parts[1].trim().toLowerCase();
@@ -420,7 +476,9 @@ function if_octane_process_say_string(str) {
                         }
                         else {
                             parseActionText = potentialAction;
-                            parseAction = createParseAction(potentialAction);
+                            parseAction = createParseActionObject(
+                                potentialAction, contextInfoObj
+                            );
                         }
                     }
 
@@ -449,12 +507,26 @@ function if_octane_process_say_string(str) {
                         };
                     }
                 }
-                // <@ item name>
+                /*
+                <@ item name>
+                
+                Numbers are ID numbers, which are part of the world model:
+                <@ item name?action=0,dobj=1,...>
+                */
                 else if (lowerTag.startsWith('@')) {
-                    const cappedContent = tagContent.substring(1).trim();
+                    const dataHalves = tagContent.substring(1).split('?');
+                    const cappedContent = dataHalves[0].trim();
                     const content = cappedContent.toLowerCase();
                     const parseActionText = 'x ' + content;
-                    const parseAction = createParseAction(parseActionText);
+
+                    let contextInfoObj = undefined;
+                    if (dataHalves.length > 1) {
+                        contextInfoObj = if_octane_build_context_info_object(dataHalves[1]);
+                    }
+
+                    const parseAction = createParseActionObject(
+                        parseActionText, contextInfoObj
+                    );
                     parseAction.tooltip = 'examine ' + content;
 
                     tagContentConversion = cappedContent + '\u00A0';
@@ -622,4 +694,8 @@ function getCountListString(countListObjects, filterZeroes=true) {
     return getListString(listObjects);
 }
 
-var if_octane_background_environment_passed = 0;
+var if_octane_background_environments_passed = 0;
+
+function if_octane_pass_background_environment() {
+    if_octane_background_environments_passed++;
+}

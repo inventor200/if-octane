@@ -22,6 +22,7 @@ const if_octane_background_channel = new FakeAudioChannel(0.75);
 const if_octane_music_channel = new FakeAudioChannel(0.5);
 
 var if_octane_primary_default_sound = undefined;
+var if_octane_fail_default_sound = undefined;
 var if_octane_current_default_sound = undefined;
 
 const AUDIO_SILENCE = 'octane-core/silence';
@@ -61,9 +62,7 @@ function playAudioFromObject(audioObject) {
 }
 
 function if_octane_arm_new_background_environment(environmentAudioProfile) {
-    // This could be innocently called in a non-vm mode, so don't
-    // throw an error for this.
-    if_octane_background_environment_passed++;
+    if_octane_pass_background_environment();
 }
 
 function if_octane_sync_background_audio(audioObjectList) {
