@@ -412,7 +412,7 @@ function if_octane_process_say_string(str) {
                         isButton: true,
                         title: title,
                         parseAction: parseAction,
-                        parseActionText,
+                        parseActionText: parseActionText,
                         clickOnce: clickOnce
                     };
                 }
