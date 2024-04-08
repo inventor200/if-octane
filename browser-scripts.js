@@ -546,12 +546,14 @@ function if_octane_create_inline_button(actionObject) {
         if (_button.isLocked) {
             if_octane_start_new_turn(_button.actionObject);
             if_octane_arm_default_sound(if_octane_fail_default_sound);
-            say(_button.verifyReason);
+            const hasOutput = evaluateMessage(_button.verifyReason);
+            if (!hasOutput) say(msg_fallback_failure);
             if_octane_end_new_turn();
             return;
         }
         if_octane_start_new_turn(_button.actionObject);
-        _button.actionObject.execute();
+        const hasOutput = evaluateMessage(_button.actionObject.execute);
+        if (!hasOutput) say(msg_fallback_success);
         if_octane_end_new_turn();
     });
 
@@ -584,17 +586,13 @@ function if_octane_format_button(button) {
             icon: "look-action-button"
         }
     ];
-    let _isExamineAction = false;
-    if (actionObject.isExamineAction != undefined) {
-        _isExamineAction = actionObject.isExamineAction();
-    }
-    const buttonProfile = (actionObject.getTurnCost() > 0) ? buttonProfiles[0] : (
-        _isExamineAction ? buttonProfiles[2] : buttonProfiles[1]
+    const buttonProfile = (evaluateInteger(actionObject.turnCost) > 0)
+    ? buttonProfiles[0] : (
+        evaluateBool(actionObject.isExamineAction)
+        ? buttonProfiles[2] : buttonProfiles[1]
     );
-    const verifyReason = actionObject.verify();
-    const isLocked = (verifyReason != null);
-
-    button.verifyReason = (verifyReason === null) ? "" : verifyReason;
+    button.verifyReason = evaluateString(actionObject.verify);
+    const isLocked = (button.verifyReason.length > 0);
 
     if (button.buttonProfileIndex != buttonProfile.index) {
         button.buttonProfileIndex = buttonProfile.index;
@@ -631,23 +629,27 @@ function if_octane_get_truncated_turn_header(actionObject) {
         truncatedAction += "\u2026";
     }
     let title = truncatedAction + " report";
+    let writtenTurns = String(time_full_turns);
+    if (time_free_turns > 0) {
+        writtenTurns += '.' + String(time_free_turns);
+    }
 
     title =
-        "Action " + String(if_octane_turn_counter) + " report, after \u201C" +
+        "Turn " + writtenTurns + " report, after \u201C" +
         truncatedAction + "\u201D";
 
     return title;
 }
 
 const IF_OCTANE_MAX_SECTION_ACTIVITY_DECAY = 4;
-const IF_OCTANE_INIT_SECTION_ACTIVITY_SCORE = 8;
+const IF_OCTANE_INIT_SECTION_ACTIVITY_SCORE = 6;
 
 function if_octane_declare_first_transcript() {
     if_octane_report_sections.push({
         index: 0,
         transcriptDiv: document.getElementById("init-transcript-area"),
         backgroundEnvironmentOrigin: if_octane_background_environments_passed,
-        turnNumber: if_octane_turn_counter,
+        turnNumber: time_total_turns,
         activityScore: IF_OCTANE_INIT_SECTION_ACTIVITY_SCORE,
         buttonList: []
     });
@@ -697,17 +699,6 @@ function if_octane_separate_turn_text(actionObject, fromButton) {
     // but the advance of a turn proves that the screen reader focus must be
     // past some known point.
 
-    //TODO: For sections before the previous turn,
-    // if the player has changed location environments,
-    // (section.backgroundEnvironmentOrigin != if_octane_background_environments_passed)
-    // or is no longer within a context that a button was matched to,
-    // then remove the button.
-
-    //TODO: When using a button in a section, add to the section's activity.
-    // Sections that have an activity score above some number are safe from UI
-    // tampering. This is to help screen readers pushing buttons in older sections,
-    // which might be immediately modified.
-
     newHeader.id = IF_OCTANE_LATEST_REPORT_ID;
 
     const newIndex = if_octane_report_sections.length;
@@ -718,7 +709,7 @@ function if_octane_separate_turn_text(actionObject, fromButton) {
         gotoLink: gotoLink,
         transcriptDiv: newTranscript,
         backgroundEnvironmentOrigin: if_octane_background_environments_passed,
-        turnNumber: if_octane_turn_counter,
+        turnNumber: time_total_turns,
         activityScore: IF_OCTANE_INIT_SECTION_ACTIVITY_SCORE,
         buttonList: []
     });
@@ -746,7 +737,7 @@ function if_octane_bump_activity(startIndex) {
 }
 
 function if_octane_update_button_states() {
-    for (let i = 0; i < if_octane_report_sections.length - 1; i++) {
+    for (let i = 0; i < if_octane_report_sections.length - 2; i++) {
         const section = if_octane_report_sections[i];
 
         // Activity decay

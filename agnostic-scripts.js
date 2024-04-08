@@ -98,16 +98,124 @@ function evaluateMessage(msg) {
     return if_octane_end_listening_to_output();
 }
 
+function evaluateString(msg) {
+    if (msg === null || msg === undefined || msg === '') return '';
+    if (Array.isArray(msg)) {
+        let total = "";
+        for (let i = 0; i < msg.length; i++) {
+            total += evaluateString(msg[i]);
+        }
+        return total;
+    }
+
+    if ((typeof msg) === 'function') {
+        return evaluateString(msg());
+    }
+
+    return String(msg);
+}
+
+function evaluateInteger(msg, floorIsZero=false) {
+    if (msg === null || msg === undefined || msg === '') {
+        return floorIsZero ? 0 : -1;
+    }
+    if (Array.isArray(msg)) {
+        let total = 0;
+        for (let i = 0; i < msg.length; i++) {
+            total += evaluateInteger(msg[i]);
+        }
+        return total;
+    }
+
+    if ((typeof msg) === 'function') {
+        return evaluateInteger(msg());
+    }
+
+    if ((typeof msg) === 'string') {
+        const intRes = parseInt(msg);
+        if (!isNaN(intRes)) {
+            return intRes;
+        }
+
+        const floatRes = parseFloat(msg);
+        if (!isNaN(floatRes)) {
+            return Math.round(floatRes);
+        }
+    }
+
+    if ((typeof msg) === 'object') {
+        if (msg.id != undefined) {
+            return msg.id;
+        }
+        return 1;
+    }
+
+    return Math.round(msg);
+}
+
+function evaluateBool(msg) {
+    if (
+        msg === false ||
+        msg === null ||
+        msg === undefined ||
+        msg === '' ||
+        msg === 0 ||
+        msg === -1
+    ) {
+        return false;
+    }
+
+    if (Array.isArray(msg)) {
+        for (let i = 0; i < msg.length; i++) {
+            if (evaluateBool(msg[i])) return true;
+        }
+        return false;
+    }
+
+    if ((typeof msg) === 'function') {
+        return evaluateBool(msg());
+    }
+
+    return true;
+}
+
 const IF_OCTANE_SIGNAL_EXECUTE = 0;
 const IF_OCTANE_SIGNAL_VERIFY = 1;
 const IF_OCTANE_SIGNAL_GET_TURN_COUNT = 2;
 
-var if_octane_turn_counter = 0;
+var time_total_turns = 0;
+var time_full_turns = 0;
+var time_free_turns = 0;
+
+var msg_fallback_success = `
+    My apologies.
+    I understood the command, and I forwarded it,
+    but I've received nothing in return to show for it.
+    It's very likely that a bug has been discovered.
+`;
+var msg_fallback_failure = `
+    My apologies.
+    While I understand the command,
+    I'm not sure how to forward it in this scenario.
+    It's very likely that a bug has been discovered.
+`;
 
 const if_octane_button_function_queue = [];
 
+function autoBind(obj) {
+    for (var prop in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, prop)) {
+            const _prop = obj[prop];
+            if ((typeof _prop) === "function") {
+                obj[prop] = _prop.bind(obj);
+            }
+        }
+    }
+    return obj;
+}
+
 function armButton(func) {
-    if_octane_button_function_queue.push(func);
+    if_octane_button_function_queue.push(autoBind(func));
 }
 
 //TODO: Implement a method for generating context-ful inline action tags.
@@ -141,7 +249,7 @@ function createParseActionObject(str, contextInfoObj) {
     // action info, in cases where a button was created for a specific
     // and known interaction. This can save quite a lot on verification
     // and processing.
-    return {
+    return autoBind({
         parsingText: str,
         canParse: true, // <- Indicate to other system that this came from text parsing.
         // This is all an interface, so we can cache actions
@@ -150,11 +258,10 @@ function createParseActionObject(str, contextInfoObj) {
         cachedResolvedAction: null,
         //TODO: Use the cachedResolvedAction for evaluating these
         isExamineAction: function() {
-            return this.parsingText.startsWith('x ');
+            return this.parsingText.startsWith('x '); //TODO: <- Swap with real action check
         },
-        getTurnCost: function() {
-            if (this.isExamineAction === undefined) return 1;
-            if (this.isExamineAction()) return 0;
+        turnCost: function() {
+            if (evaluateBool(this.isExamineAction)) return 0;
             return 1;
         },
         verify: function() {
@@ -179,7 +286,7 @@ function createParseActionObject(str, contextInfoObj) {
             // and use any extra context in this.contextInfoObj to narrow it down.
             // Once we have it, cache it in cachedResolvedAction
         }
-    }
+    });
 }
 
 // Add a function to run on page ready
@@ -649,7 +756,15 @@ function if_octane_say_room(str) {
 }
 
 function if_octane_start_new_turn(actionObject, fromButton=false) {
-    if_octane_turn_counter++;
+    const turnCost = evaluateInteger(actionObject.turnCost);
+    time_total_turns++;
+    if (turnCost === 0) {
+        time_free_turns++;
+    }
+    else {
+        time_free_turns = 0;
+        time_full_turns += turnCost;
+    }
     if_octane_separate_turn_text(actionObject,
         fromButton && (actionObject.canParse != undefined)
     );

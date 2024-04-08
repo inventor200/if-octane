@@ -189,6 +189,7 @@ echo "" >> "$BUILT_JS.js"
 
 # Add agnostic scripts
 cat "$IF_OCTANE_ENGINE_PATH/agnostic-scripts.js" >> "$BUILT_JS.js"
+cat "$IF_OCTANE_ENGINE_PATH/world-model.js" >> "$BUILT_JS.js"
 echo "" >> "$BUILT_JS.js"
 
 # Add browser scripts
