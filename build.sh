@@ -215,7 +215,18 @@ echo 'blurb:' >> "$BUILT_JS.js"
 echo "\"$PROJ_BLURB\"," >> "$BUILT_JS.js"
 echo 'version:' >> "$BUILT_JS.js"
 echo "\"$PROJ_VERSION\"," >> "$BUILT_JS.js"
-echo 'isBrowserBased: true' >> "$BUILT_JS.js" #TODO: Handle this differently for nodeJS
+echo 'isBrowserBased: true,' >> "$BUILT_JS.js" #TODO: Handle this differently for nodeJS
+#TODO: Handle this differently for nodeJS
+if [ $USE_EMBEDDING -eq 1 ]; then
+    echo 'hasVM: true,' >> "$BUILT_JS.js"
+else
+    echo 'hasVM: false,' >> "$BUILT_JS.js"
+fi
+if [ $USE_DEBUG_MODE -eq 1 ]; then
+    echo 'isDebug: true' >> "$BUILT_JS.js"
+else
+    echo 'isDebug: false' >> "$BUILT_JS.js"
+fi
 echo '};' >> "$BUILT_JS.js"
 echo "" >> "$BUILT_JS.js"
 

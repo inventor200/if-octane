@@ -4,8 +4,6 @@ window.onload = function() {
     if_octane_doReady();
 }
 
-const IF_OCTANE_USING_EMBEDDING = false;
-
 class FakeAudioChannel {
     constructor(startingVolume) {
         this.volume = startingVolume;

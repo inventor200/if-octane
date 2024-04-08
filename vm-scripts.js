@@ -1,7 +1,5 @@
 // This is for anything that uses browser and WASM.
 
-const IF_OCTANE_USING_EMBEDDING = true;
-
 var if_octane_emready1 = false;
 var if_octane_emready2 = false;
 var if_octane_emready3 = false;
