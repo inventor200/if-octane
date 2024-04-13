@@ -1,48 +1,52 @@
 // This is for anything that uses browser and WASM.
 
-var if_octane_emready1 = false;
-var if_octane_emready2 = false;
-var if_octane_emready3 = false;
-var if_octane_doneReady = false;
+//TODO: Use the following to implement a new archive loading system,
+// which doesn't use WASM:
+// https://dev.to/ionic/converting-a-base64-string-to-a-blob-in-javascript-35kl
+// https://developer.mozilla.org/en-US/docs/Web/API/Blob/stream
+// https://stackoverflow.com/questions/62441655/how-do-i-convert-bytes-to-integers-in-javascript
+//
+// We're probably gonna need to implement our own archive format, because everything
+// I'm finding is:
+// 1) Overkill
+// 2) Cannot be merged into an all-in-one without breaking license or functionality
+//
+// The new system will likely be based on the WAD format.
+//
+// 4 bytes -> length of manifest file, in bytes
+// n bytes -> manifest
+//      Use slice to get manifest blob, and blob.text() to get UTF-8 manifest file
+//      Each line of the manifest has:
+//          integer -> length of entry, in bytes, from last entry end
+//          |
+//          string -> name/path of asset
+//          |
+//          string -> MIME type of asset
+//          \n
+// n bytes -> asset
+// n bytes -> ...
+// ...
+// After the manifest is read in and parsed, use blob.slice() to pull out sub-blobs.
 
-function if_octane_allReady() {
-    //console.log("Calling allReady!");
-    if_octane_start_file_loading();
-    if_octane_emready1 = true;
-    if_octane_tryReady();
-}
+var if_octane_embed_ready = false;
+var if_octane_window_ready = false;
+var if_octane_doneReady = false;
 
 window.onload = function() {
     //console.log("Document ready");
-    if_octane_emready3 = true;
+    if_octane_window_ready = true;
     if_octane_tryReady();
 }
 
 function if_octane_tryReady() {
     if (if_octane_doneReady) return;
-    if (!if_octane_emready1) return;
-    if (!if_octane_emready2) return;
-    if (!if_octane_emready3) return;
+    if (!if_octane_embed_ready) return;
+    if (!if_octane_window_ready) return;
     if (if_octane_prepared_file_count
         < if_octane_total_files_to_load.length) return;
     if (if_octane_doneReady) return;
     if_octane_doneReady = true;
     if_octane_doReady();
-}
-
-var Module = {
-    print: (function () {
-        return function (text) {
-            if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
-            console.log(text);
-        };
-    })()
-};
-
-Module['onRuntimeInitialized'] = function() {
-    //console.log("wasm loaded ");
-    if_octane_emready2 = true;
-    if_octane_tryReady();
 }
 
 // File management
@@ -118,26 +122,23 @@ const if_octane_total_files_to_load = [];
 
 const if_octane_loaded_audio_files = [];
 
-function if_octane_prepare_file(vmPath) {
-    vmPath = vmPath.trim();
-    if (vmPath.startsWith('/')) {
-        vmPath = vmPath.substring(1);
-    }
+function if_octane_prepare_file(dumpBlob, manifestItem, sliceStart) {
+    const itemPath = manifestItem.path;
     
     let name;
     let extension;
     let mime;
     let isImageFile;
-    for (let i = vmPath.length - 1; i >= 0; i--) {
-        if (vmPath[i] === '.') {
-            name = vmPath.substring(0, i);
-            extension = vmPath.substring(i).toLowerCase();
+    for (let i = itemPath.length - 1; i >= 0; i--) {
+        if (itemPath[i] === '.') {
+            name = itemPath.substring(0, i);
+            extension = itemPath.substring(i).toLowerCase();
             break;
         }
     }
 
     if (extension === undefined) {
-        console.error("File has no extension: " + vmPath);
+        console.error("File has no extension: " + itemPath);
         return;
     }
 
@@ -149,10 +150,12 @@ function if_octane_prepare_file(vmPath) {
         }
     }
 
-    console.log('Loading "/' + vmPath + '"...');
+    console.log('Loading "/' + itemPath + '"...');
     if_octane_total_files_to_load.push({
         name: name,
-        blob: new Blob([FS.readFile('/' + vmPath)], {'type': mime}),
+        blob: (dumpBlob.slice(
+            sliceStart, sliceStart + manifestItem.len, mime
+        )),
         isImageFile: isImageFile
     });
 }
@@ -180,40 +183,26 @@ function if_octane_load_files() {
     }
 }
 
-function if_octane_start_file_loading() {
-    if_octane_search_directory('/');
-    if_octane_load_files();
-}
+async function if_octane_start_file_loading() {
+    const dataDumpIn64 = await fetch(GAME_INFO.embeddedData);
+    const dumpBlob = await dataDumpIn64.blob();
 
-function if_octane_search_directory(path) {
-    const contents = FS.readdir(path);
-    for (let i = 0; i < contents.length; i++) {
-        const item = contents[i];
-        if (item === '.' || item === '..') continue;
-
-        const isRoot = (path === '/');
-
-        if (isRoot) {
-            if (
-                item === 'tmp' ||
-                item === 'home' ||
-                item === 'dev' ||
-                item === 'proc'
-            ) {
-                console.log('Skipping system directory: "/' + item + '"...');
-                continue;
-            }
-        }
-
-        const addedPath = isRoot ? ('/' + item) : (path + '/' + item);
-        const modeMask = FS.stat(addedPath).mode;
-        if (FS.isDir(modeMask)) {
-            if_octane_search_directory(addedPath);
-        }
-        else {
-            if_octane_prepare_file(addedPath);
-        }
+    let sliceStart = 0;
+    for (let i = 0; i < GAME_INFO.embeddedManifest.length; i++) {
+        const manifestItem = GAME_INFO.embeddedManifest[i];
+        if (manifestItem.len === 0) continue;
+        if_octane_prepare_file(dumpBlob, manifestItem, sliceStart);
+        sliceStart += manifestItem.len;
     }
+
+    if_octane_load_files();
+
+    // Free up memory
+    GAME_INFO.embeddedData = null;
+
+    // Mark operation as done
+    if_octane_embed_ready = true;
+    if_octane_tryReady();
 }
 
 const AUDIO_CHANNEL_UI = 0;

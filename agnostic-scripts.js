@@ -350,7 +350,7 @@ function handleResourcesWith(resFunc) {
 
 // This runs on program start.
 function if_octane_doReady() {
-    if (GAME_INFO.hasVM) {
+    if (GAME_INFO.useEmbedding) {
         for (let i = 0; i < if_octane_resource_loading_functions.length; i++) {
             const resFunc = if_octane_resource_loading_functions[i]
             resFunc();

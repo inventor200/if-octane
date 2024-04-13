@@ -100,6 +100,9 @@ if ! [ -d "$OUT_DIR" ]; then
 fi
 
 EMBED_PATH="$IF_OCTANE_PROJ_SRC/embed"
+EMBED_PATH_EXTRA="$EMBED_PATH/"
+
+DUMP_PATH="$IF_OCTANE_ENGINE_PATH/cache/dump"
 
 USE_EMBEDDING=0
 if [ -d "$EMBED_PATH" ]; then
@@ -108,33 +111,43 @@ if [ -d "$EMBED_PATH" ]; then
     fi
 fi
 
-if [ $USE_EMBEDDING -eq 1 ]; then
-    # Set a limit of 25 MB
-    EMBED_SIZE=$(du -sh "$EMBED_PATH")
-    if $(echo "$EMBED_SIZE" | grep -qE "^[1234567890]+M"); then
-        if [ $(echo "$EMBED_SIZE" | grep -oE "^[1234567890]+") -ge 25 ]; then
-            echo "Your embed directory contains more than 25 MB of data; the web page will not load!"
-            exit 1
+recursiveFind() {
+    for i in "$1"/*; do
+        if [ -d "$i" ]; then
+            recursiveFind "$i"
+        elif [ -f "$i" ]; then
+            ASSET_PATH=${i#"$EMBED_PATH_EXTRA"}
+            ASSET_SIZE=$(stat -c%s "$i")
+            echo -n "{len:$ASSET_SIZE, path:\"$ASSET_PATH\"},"
         fi
-    fi
-else
+    done
+}
+
+recursiveDump() {
+    for i in "$1"/*; do
+        if [ -d "$i" ]; then
+            recursiveDump "$i"
+        elif [ -f "$i" ]; then
+            echo "Adding to data dump: $i"
+            dd bs=1024 if="$i" of="$DUMP_PATH" conv=notrunc oflag=append
+        fi
+    done
+}
+
+if [ $USE_EMBEDDING -eq 0 ]; then
     echo "This project will not use embedding."
-fi
+else
+    echo "Building embedded manifest..."
 
-if [ $USE_EMBEDDING -eq 1 ]; then
-    echo "Compiling WebAssembly data..."
+    # Write the manifest file
+    MANIFEST_LIST=$(recursiveFind "$IF_OCTANE_PROJ_SRC/embed")
+    MANIFEST_LIST=${MANIFEST_LIST::-1}
 
-    #TODO: Need to make sure wasm works on node.js
-    #https://nodejs.org/en/learn/getting-started/nodejs-with-webassembly
+    echo -n "[$MANIFEST_LIST]," > "$IF_OCTANE_ENGINE_PATH/cache/manifest.js"
 
-    # Compile WebAssembly
-    # Load limit seems to be near 26214400 (25 MB), so limit to that, but allow for 26 MB of memory, just for padding.
-    # Remap `./embed` to `/` in VM space.
-    emcc -sENVIRONMENT=web -sFORCE_FILESYSTEM -Os "$IF_OCTANE_ENGINE_PATH/compiled-content.c" -o compiled-content.js --embed-file "$EMBED_PATH"@/ -sTOTAL_MEMORY=27262976 #-sUSE_ZLIB=1
-    mv compiled-content.js "$IF_OCTANE_ENGINE_PATH/cache/compiled-content.js"
-    mv compiled-content.wasm "$IF_OCTANE_ENGINE_PATH/cache/compiled-content.wasm"
-
-    echo "Preparing package..."
+    # Write the byte dump file
+    echo -n "" > "$DUMP_PATH"
+    recursiveDump "$IF_OCTANE_PROJ_SRC/embed"
 fi
 
 PREDOC_NAME="$IF_OCTANE_ENGINE_PATH/precrunch/index.html"
@@ -198,9 +211,9 @@ cat "$IF_OCTANE_ENGINE_PATH/browser-scripts.js" >> "$BUILT_JS.js"
 echo "" >> "$BUILT_JS.js"
 
 if [ $USE_EMBEDDING -eq 1 ]; then
-    cat "$IF_OCTANE_ENGINE_PATH/vm-scripts.js" >> "$BUILT_JS.js"
+    cat "$IF_OCTANE_ENGINE_PATH/embed-scripts.js" >> "$BUILT_JS.js"
 else
-    cat "$IF_OCTANE_ENGINE_PATH/no-vm-scripts.js" >> "$BUILT_JS.js"
+    cat "$IF_OCTANE_ENGINE_PATH/no-embed-scripts.js" >> "$BUILT_JS.js"
 fi
 echo "" >> "$BUILT_JS.js"
 
@@ -216,11 +229,15 @@ echo "\"$PROJ_BLURB\"," >> "$BUILT_JS.js"
 echo 'version:' >> "$BUILT_JS.js"
 echo "\"$PROJ_VERSION\"," >> "$BUILT_JS.js"
 echo 'isBrowserBased: true,' >> "$BUILT_JS.js" #TODO: Handle this differently for nodeJS
-#TODO: Handle this differently for nodeJS
 if [ $USE_EMBEDDING -eq 1 ]; then
-    echo 'hasVM: true,' >> "$BUILT_JS.js"
+    echo "Writing embedded data to GAME_INFO.embeddedManifest and GAME_INFO.embeddedData..."
+    echo -n 'useEmbedding: true,embeddedManifest: ' >> "$BUILT_JS.js"
+    cat "$IF_OCTANE_ENGINE_PATH/cache/manifest.js" >> "$BUILT_JS.js"
+    echo -n 'embeddedData:"data:application/octet-stream;base64,' >> "$BUILT_JS.js"
+    base64 --wrap 0 "$DUMP_PATH" >> "$BUILT_JS.js"
+    echo '",' >> "$BUILT_JS.js"
 else
-    echo 'hasVM: false,' >> "$BUILT_JS.js"
+    echo 'useEmbedding: false,' >> "$BUILT_JS.js"
 fi
 if [ $USE_DEBUG_MODE -eq 1 ]; then
     echo 'isDebug: true' >> "$BUILT_JS.js"
@@ -229,6 +246,9 @@ else
 fi
 echo '};' >> "$BUILT_JS.js"
 echo "" >> "$BUILT_JS.js"
+if [ $USE_EMBEDDING -eq 1 ]; then
+    echo 'if_octane_start_file_loading();' >> "$BUILT_JS.js"
+fi
 
 # Write custom scripts
 echo "Combining scripts..."
@@ -251,24 +271,6 @@ do
         echo "" >> "$BUILT_JS.js"
     fi
 done < "$IF_OCTANE_PROJ_SRC/$MAKE_LIST_FILENAME"
-
-if [ $USE_EMBEDDING -eq 1 ]; then
-    echo "Converting WebAssembly data to base64..."
-
-    # Generate the wasm data
-    WASM_DATA_64=$(base64 --wrap 0 "$IF_OCTANE_ENGINE_PATH/cache/compiled-content.wasm")
-
-    # Write to library file
-    echo -n 'const _embedded_wasm_bin_data = "data:application/octet-stream;base64,' >> "$BUILT_JS.js"
-    echo -n "$WASM_DATA_64" >> "$BUILT_JS.js"
-    echo '";' >> "$BUILT_JS.js"
-
-    # Inject the wasm replacement
-    sed -i -e 's/"compiled-content.wasm"/_embedded_wasm_bin_data/g' "$IF_OCTANE_ENGINE_PATH/cache/compiled-content.js"
-
-    echo "" >> "$BUILT_JS.js"
-    cat "$IF_OCTANE_ENGINE_PATH/cache/compiled-content.js" >> "$BUILT_JS.js"
-fi
 
 if [ $USE_DEBUG_MODE -eq 0 ]; then
     echo "Uglifying..."

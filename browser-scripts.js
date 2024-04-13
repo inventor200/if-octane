@@ -165,7 +165,7 @@ class LiveRegionManager {
 
         // Audio clips always play before anything else
         if (msgType === ANNOUNCEMENT_TYPE_AUDIO && dest.length > 0) {
-            if (GAME_INFO.hasVM) {
+            if (GAME_INFO.useEmbedding) {
                 if (dest[dest.length - 1].type === ANNOUNCEMENT_TYPE_AUDIO) {
                     // No text content yet; just slap it onto the end
                     dest.push(newMsg);
@@ -182,7 +182,7 @@ class LiveRegionManager {
             }
         }
         // If we cannot do embedding, then skip audio pushes
-        else if (msgType != ANNOUNCEMENT_TYPE_AUDIO || GAME_INFO.hasVM) {
+        else if (msgType != ANNOUNCEMENT_TYPE_AUDIO || GAME_INFO.useEmbedding) {
             dest.push(newMsg);
         }
     }
@@ -325,7 +325,7 @@ function queueAnnouncement(message) {
 }
 
 function queueSFX(audioObject) {
-    if (!GAME_INFO.hasVM) return;
+    if (!GAME_INFO.useEmbedding) return;
     announcementManager.addMessage(audioObject, ANNOUNCEMENT_TYPE_AUDIO);
 }
 
