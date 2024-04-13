@@ -1,32 +1,4 @@
-// This is for anything that uses browser and WASM.
-
-//TODO: Use the following to implement a new archive loading system,
-// which doesn't use WASM:
-// https://dev.to/ionic/converting-a-base64-string-to-a-blob-in-javascript-35kl
-// https://developer.mozilla.org/en-US/docs/Web/API/Blob/stream
-// https://stackoverflow.com/questions/62441655/how-do-i-convert-bytes-to-integers-in-javascript
-//
-// We're probably gonna need to implement our own archive format, because everything
-// I'm finding is:
-// 1) Overkill
-// 2) Cannot be merged into an all-in-one without breaking license or functionality
-//
-// The new system will likely be based on the WAD format.
-//
-// 4 bytes -> length of manifest file, in bytes
-// n bytes -> manifest
-//      Use slice to get manifest blob, and blob.text() to get UTF-8 manifest file
-//      Each line of the manifest has:
-//          integer -> length of entry, in bytes, from last entry end
-//          |
-//          string -> name/path of asset
-//          |
-//          string -> MIME type of asset
-//          \n
-// n bytes -> asset
-// n bytes -> ...
-// ...
-// After the manifest is read in and parsed, use blob.slice() to pull out sub-blobs.
+// This is for anything that uses browser and embedding.
 
 var if_octane_embed_ready = false;
 var if_octane_window_ready = false;

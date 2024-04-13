@@ -1,4 +1,4 @@
-// This is for anything that uses browser but no WASM.
+// This is for anything that uses browser but no embedding.
 
 window.onload = function() {
     if_octane_doReady();

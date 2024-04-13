@@ -1,4 +1,4 @@
-// This is for anything that relies on neither WASM inclusion nor browser-vs-terminal.
+// This is for anything that works regardless of embedding or browser-vs-terminal.
 
 Array.prototype.insert = function(index, element) {
     if (index >= this.length) {
