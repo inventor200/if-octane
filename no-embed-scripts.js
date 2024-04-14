@@ -34,9 +34,8 @@ function if_octane_fetch_audio_file(audioName) {
     return undefined;
 }
 
-function createAudioObject(audioName, channel=AUDIO_CHANNEL_UI) {
+async function createAudioObject(audioName, options) {
     if_octane_fallback_no_media_error();
-    return undefined;
 }
 
 function setAudioPriority(audioName, priorityValue) {

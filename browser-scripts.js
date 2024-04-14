@@ -27,6 +27,7 @@ class LiveRegionManager {
         this.announcementPacket = undefined;
         this.audioQueue = [];
         this.armedFade = false;
+        this.activeJobs = 0;
     }
 
     getDiv() {
@@ -37,7 +38,7 @@ class LiveRegionManager {
         return this.div;
     }
 
-    clearDiv() {
+    async clearDiv() {
         // Dump audio into queue and sort
         this.audioQueue = [];
         this.armedFade = false;
@@ -47,7 +48,16 @@ class LiveRegionManager {
                 // We have reached the end of audio content
                 break;
             }
-            this.audioQueue.push(this.mainBuffer.shift().content);
+            const audioContent = this.mainBuffer.shift().content;
+            if (audioContent.isRequest) {
+                const requestedAudio = await createAudioObject(
+                    audioContent.audioName, audioContent.options
+                )
+                this.audioQueue.push(requestedAudio);
+            }
+            else {
+                this.audioQueue.push(audioContent);
+            }
         }
 
         let queuedForegroundSounds = false;
@@ -133,9 +143,12 @@ class LiveRegionManager {
                 if_octane_current_default_sound = if_octane_primary_default_sound;
             }
             if (if_octane_current_default_sound) {
-                this.audioQueue.push(createAudioObject(
-                    if_octane_current_default_sound, AUDIO_CHANNEL_UI
-                ));
+                const defaultAudio = await createAudioObject(
+                    if_octane_current_default_sound, {
+                        channel: AUDIO_CHANNEL_UI
+                    }
+                )
+                this.audioQueue.push(defaultAudio);
             }
         }
 
@@ -187,6 +200,11 @@ class LiveRegionManager {
         }
     }
 
+    async fireAnotherIteration() {
+        await this.clearDiv();
+        this.iterateDump();
+    }
+
     startDump() {
         if (this.isLocked) return; // This will resolve itself later
 
@@ -194,8 +212,7 @@ class LiveRegionManager {
 
         this.isLocked = true;
 
-        this.clearDiv();
-        this.iterateDump();
+        this.fireAnotherIteration();
     }
 
     iterateDump() {
@@ -311,8 +328,7 @@ class LiveRegionManager {
             this.mainBuffer.push(this.secondaryBuffer.shift());
         }
 
-        this.clearDiv();
-        this.iterateDump();
+        this.fireAnotherIteration();
     }
 }
 
@@ -324,9 +340,13 @@ function queueAnnouncement(message) {
     announcementManager.addMessage(message, ANNOUNCEMENT_TYPE_TEXT);
 }
 
-function queueSFX(audioObject) {
+function queueSFX(audioName, options) {
     if (!GAME_INFO.useEmbedding) return;
-    announcementManager.addMessage(audioObject, ANNOUNCEMENT_TYPE_AUDIO);
+    announcementManager.addMessage({
+        isRequest: true,
+        audioName: audioName,
+        options: options
+    }, ANNOUNCEMENT_TYPE_AUDIO);
 }
 
 function if_octane_get_output_element() {

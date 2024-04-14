@@ -366,6 +366,11 @@ function if_octane_doReady() {
     }
 
     if_octane_update_button_states();
+
+    if (!GAME_INFO.isDebug) return;
+    
+    const doneTime = performance.now();
+    console.log("Total load time: " + doneTime + " ms!");
 }
 
 // This is for processing output strings

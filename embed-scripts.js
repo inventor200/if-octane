@@ -17,6 +17,7 @@ function if_octane_tryReady() {
     if (if_octane_prepared_file_count
         < if_octane_total_files_to_load.length) return;
     if (if_octane_doneReady) return;
+    if_octane_release_prep_memory();
     if_octane_doneReady = true;
     if_octane_doReady();
 }
@@ -94,7 +95,7 @@ const if_octane_total_files_to_load = [];
 
 const if_octane_loaded_audio_files = [];
 
-function if_octane_prepare_file(dumpBlob, manifestItem, sliceStart) {
+function if_octane_prepare_file(dumpArray, manifestItem, sliceStart) {
     const itemPath = manifestItem.path;
     
     let name;
@@ -123,58 +124,78 @@ function if_octane_prepare_file(dumpBlob, manifestItem, sliceStart) {
     }
 
     console.log('Loading "/' + itemPath + '"...');
+    const sub = dumpArray.slice(
+        sliceStart, sliceStart + manifestItem.len
+    );
     if_octane_total_files_to_load.push({
         name: name,
-        blob: (dumpBlob.slice(
-            sliceStart, sliceStart + manifestItem.len, mime
-        )),
+        mime: mime,
+        buffer: sub,
         isImageFile: isImageFile
     });
 }
 
 function if_octane_load_files() {
     for (let i = 0; i < if_octane_total_files_to_load.length; i++) {
-        const blobProfile = if_octane_total_files_to_load[i];
+        // We are shifting, so we don't create duplicate buffers
+        const assetProfile = if_octane_total_files_to_load[i];
 
-        if (blobProfile.isImageFile) {
+        if (assetProfile.isImageFile) {
             //TODO: Implement image caching
         }
         else {
-            blobProfile.blob.arrayBuffer().then(arrayBuffer => {
-                if_octane_audio_context.decodeAudioData(arrayBuffer, function(buffer) {
-                    if_octane_loaded_audio_files.push({
-                        name: blobProfile.name,
-                        buffer: buffer,
-                        priority: 0
-                    });
-                    if_octane_prepared_file_count++;
-                    if_octane_tryReady();
-                }, function(err) { console.log("err(decodeAudioData): "+err); });
+            if_octane_loaded_audio_files.push({
+                name: assetProfile.name,
+                buffer: assetProfile.buffer,
+                isDecoded: false,
+                priority: 0
             });
+            if_octane_prepared_file_count++;
+            if_octane_tryReady();
         }
     }
 }
 
 async function if_octane_start_file_loading() {
-    const dataDumpIn64 = await fetch(GAME_INFO.embeddedData);
-    const dumpBlob = await dataDumpIn64.blob();
+    // Also clears out the string instance
+    GAME_INFO.embeddedData = await (
+        await fetch(GAME_INFO.embeddedData, {
+            cache: "no-store",
+            credentials: "omit",
+            keepalive: false,
+            mode: "same-origin",
+            priority: "high"
+        })
+    ).arrayBuffer();
+
+    // Paranoid: Make sure no memory is wasted on resize padding
+    GAME_INFO.embeddedData = GAME_INFO.embeddedData.transferToFixedLength(
+        GAME_INFO.embeddedData.length
+    );
 
     let sliceStart = 0;
     for (let i = 0; i < GAME_INFO.embeddedManifest.length; i++) {
         const manifestItem = GAME_INFO.embeddedManifest[i];
         if (manifestItem.len === 0) continue;
-        if_octane_prepare_file(dumpBlob, manifestItem, sliceStart);
+        if_octane_prepare_file(GAME_INFO.embeddedData, manifestItem, sliceStart);
         sliceStart += manifestItem.len;
     }
 
-    if_octane_load_files();
-
-    // Free up memory
+    // Release dump memory; file prep now holds the underlying data,
+    // and larger games can't afford duplicates.
     GAME_INFO.embeddedData = null;
+
+    if_octane_load_files();
 
     // Mark operation as done
     if_octane_embed_ready = true;
     if_octane_tryReady();
+}
+
+function if_octane_release_prep_memory() {
+    while (if_octane_total_files_to_load.length > 0) {
+        if_octane_total_files_to_load.shift();
+    }
 }
 
 const AUDIO_CHANNEL_UI = 0;
@@ -193,9 +214,6 @@ function if_octane_fetch_audio_file(audioName) {
     for (let i = 0; i < if_octane_loaded_audio_files.length; i++) {
         const audioFile = if_octane_loaded_audio_files[i];
         if (audioName != audioFile.name) continue;
-
-        const source = if_octane_audio_context.createBufferSource();
-        source.buffer = audioFile.buffer;
         return audioFile;
     }
 
@@ -203,11 +221,55 @@ function if_octane_fetch_audio_file(audioName) {
     return undefined;
 }
 
-function createAudioObject(audioName, channel=AUDIO_CHANNEL_UI, distance=0, muffle=0) {
+class OctaneAudioObject {
+    constructor(audioFile, source, options) {
+        this.audioFile = audioFile;
+        this.source = source;
+        this.channel = options.channel;
+        this.faderGroup = undefined;
+        this.connectionTail = undefined;
+        this.priorityOffset = 0;
+        this.distance = options.distance;
+        this.muffle = options.muffle;
+    }
+    getPriority() {
+        return this.audioFile.priority + this.priorityOffset;
+    }
+    isLoop() {
+        // Forcefully do not allow UI and foreground audio to loop
+        if (this.channel <= AUDIO_CHANNEL_FOREGROUND) return false;
+        return this.audioFile.isLoop;
+    }
+    randomFrequency() {
+        return this.audioFile.randomFrequency;
+    }
+}
+
+async function createAudioObject(audioName, options) {
+    if (options === undefined) {
+        options = {
+            channel: AUDIO_CHANNEL_UI,
+            distance: 0,
+            muffle: 0
+        }
+    }
+
+    if (options.channel === undefined) {
+        options.channel = AUDIO_CHANNEL_UI;
+    }
+
+    if (options.distance === undefined) {
+        options.distance = 0;
+    }
+
+    if (options.muffle === undefined) {
+        options.muffle = 0;
+    }
+
     if (audioName === AUDIO_SILENCE) {
         return {
             isSilence: true,
-            channel: channel,
+            channel: options.channel,
             priorityOffset: 0,
             getPriority: function() {
                 return 0;
@@ -223,32 +285,18 @@ function createAudioObject(audioName, channel=AUDIO_CHANNEL_UI, distance=0, muff
 
     const audioFile = if_octane_fetch_audio_file(audioName);
 
-    if (audioFile === undefined) return undefined;
+    if (audioFile === undefined) return;
+
+    if (!audioFile.isDecoded) {
+        const decoded = await if_octane_audio_context.decodeAudioData(audioFile.buffer);
+        audioFile.buffer = decoded;
+        audioFile.isDecoded = true;
+    }
 
     const source = if_octane_audio_context.createBufferSource();
     source.buffer = audioFile.buffer;
 
-    return {
-        audioFile: audioFile,
-        source: source,
-        channel: channel,
-        faderGroup: undefined,
-        connectionTail: undefined,
-        priorityOffset: 0,
-        distance: distance,
-        muffle: muffle,
-        getPriority: function() {
-            return audioFile.priority + this.priorityOffset;
-        },
-        isLoop: function() {
-            // Forcefully do not allow UI and foreground audio to loop
-            if (channel <= AUDIO_CHANNEL_FOREGROUND) return false;
-            return audioFile.isLoop;
-        },
-        randomFrequency: function() {
-            return audioFile.randomFrequency;
-        }
-    };
+    return new OctaneAudioObject(audioFile, source, options);
 }
 
 function setAudioPriority(audioName, priorityValue) {
