@@ -27,6 +27,47 @@ function if_octane_tryReady() {
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 const if_octane_audio_context = new AudioContext();
 
+//TODO: We might need to split up larger audio files into segments.
+// A way to possibly do this in bash is below:
+// https://superuser.com/questions/525210/splitting-an-audio-file-into-chunks-of-a-specified-length
+// From there, we just need to understand a series of segment files as
+// a whole track for streaming.
+//FIXME: This is for debug only!!
+function estimateAudioSize(audioBuffer) {
+    let byteSize = 0;
+    if (audioBuffer instanceof AudioBuffer) {
+        byteSize = audioBuffer.length * 4 * audioBuffer.numberOfChannels;
+    }
+    else {
+        byteSize = audioBuffer.byteLength;
+    }
+
+    let byteMag = 0;
+    while (byteSize >= 1024) {
+        byteMag++;
+        byteSize /= 1024;
+    }
+
+    let str = String(Math.round(byteSize)) + " ";
+    switch(byteMag) {
+        default:
+        case 0:
+            str += "B";
+            break;
+        case 1:
+            str += "kB";
+            break;
+        case 2:
+            str += "MB";
+            break;
+        case 3:
+            str += "GB";
+            break;
+    }
+
+    return str;
+}
+
 const if_octane_mime_profiles = [
     {
         extension: '.flac',
@@ -288,7 +329,9 @@ async function createAudioObject(audioName, options) {
     if (audioFile === undefined) return;
 
     if (!audioFile.isDecoded) {
+        console.log("Before: " + estimateAudioSize(audioFile.buffer));
         const decoded = await if_octane_audio_context.decodeAudioData(audioFile.buffer);
+        console.log("After: " + estimateAudioSize(decoded));
         audioFile.buffer = decoded;
         audioFile.isDecoded = true;
     }
