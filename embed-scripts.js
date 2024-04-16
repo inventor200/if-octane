@@ -187,13 +187,15 @@ function if_octane_load_files() {
         else {
             if_octane_loaded_audio_files.push({
                 name: assetProfile.name,
+                mime: assetProfile.mime,
                 buffer: assetProfile.buffer,
                 isDecoded: false,
                 priority: 0
             });
-            if_octane_prepared_file_count++;
-            if_octane_tryReady();
         }
+
+        if_octane_prepared_file_count++;
+        if_octane_tryReady();
     }
 }
 
@@ -237,6 +239,8 @@ function if_octane_release_prep_memory() {
     while (if_octane_total_files_to_load.length > 0) {
         if_octane_total_files_to_load.shift();
     }
+
+    GAME_INFO.embeddedManifest = null;
 }
 
 const AUDIO_CHANNEL_UI = 0;
@@ -263,9 +267,8 @@ function if_octane_fetch_audio_file(audioName) {
 }
 
 class OctaneAudioObject {
-    constructor(audioFile, source, options) {
+    constructor(audioFile, options) {
         this.audioFile = audioFile;
-        this.source = source;
         this.channel = options.channel;
         this.faderGroup = undefined;
         this.connectionTail = undefined;
@@ -283,6 +286,63 @@ class OctaneAudioObject {
     }
     randomFrequency() {
         return this.audioFile.randomFrequency;
+    }
+    async decode() {
+        if (!this.audioFile.isDecoded) {
+            console.log("Before: " + estimateAudioSize(this.audioFile.buffer));
+            const decoded = await if_octane_audio_context.decodeAudioData(
+                this.audioFile.buffer
+            );
+            console.log("After: " + estimateAudioSize(decoded));
+            this.audioFile.buffer = decoded;
+            this.audioFile.isDecoded = true;
+        }
+
+        this.source = if_octane_audio_context.createBufferSource();
+        this.source.buffer = this.audioFile.buffer;
+    }
+    getSource() {
+        return this.source;
+    }
+    getKnuckle() {
+        // This is the part which connects to the tail
+        return this.getSource();
+    }
+    start() {
+        const source = this.getSource();
+        if (source === undefined) return;
+        source.start();
+    }
+    stop() {
+        const source = this.getSource();
+        if (source === undefined) return;
+        source.stop();
+    }
+    disconnect() {
+        const source = this.getSource();
+        if (source === undefined) return;
+        source.disconnect();
+    }
+}
+
+class OctaneSilenceObject extends OctaneAudioObject {
+    constructor(options) {
+        super(undefined, options);
+        this.isSilence = true;
+        this.channel = options.channel;
+        this.priorityOffset = 0;
+    }
+    getPriority() {
+        return 0;
+    }
+    isLoop() {
+        return false;
+    }
+    randomFrequency() {
+        return 1.0;
+    }
+    async decode() {
+        // Do nothing
     }
 }
 
@@ -308,38 +368,18 @@ async function createAudioObject(audioName, options) {
     }
 
     if (audioName === AUDIO_SILENCE) {
-        return {
-            isSilence: true,
-            channel: options.channel,
-            priorityOffset: 0,
-            getPriority: function() {
-                return 0;
-            },
-            isLoop: function() {
-                return false;
-            },
-            randomFrequency: function() {
-                return 1.0;
-            }
-        };
+        return new OctaneSilenceObject(options);
     }
 
     const audioFile = if_octane_fetch_audio_file(audioName);
 
-    if (audioFile === undefined) return;
+    if (audioFile === undefined) return null;
 
-    if (!audioFile.isDecoded) {
-        console.log("Before: " + estimateAudioSize(audioFile.buffer));
-        const decoded = await if_octane_audio_context.decodeAudioData(audioFile.buffer);
-        console.log("After: " + estimateAudioSize(decoded));
-        audioFile.buffer = decoded;
-        audioFile.isDecoded = true;
-    }
+    const audioObj = new OctaneAudioObject(audioFile, options);
 
-    const source = if_octane_audio_context.createBufferSource();
-    source.buffer = audioFile.buffer;
+    await audioObj.decode();
 
-    return new OctaneAudioObject(audioFile, source, options);
+    return audioObj;
 }
 
 function setAudioPriority(audioName, priorityValue) {
@@ -372,7 +412,7 @@ function playAudioFromObject(audioObject) {
 
     if (audioObject.isSilence) return 0;
 
-    let tailEnd = audioObject.source;
+    let tailEnd = audioObject.getKnuckle();
 
     if (audioObject.audioFile.fineVolume) {
         // If the audio file has fine volume, then apply it here.
@@ -408,14 +448,22 @@ function playAudioFromObject(audioObject) {
     }
     else {
         //TODO: Handle looping sounds
-        audioObject.source.start();
+        audioObject.start();
     }
 
-    // Return the milliseconds to wait before playing the next audio
-    let myDuration = audioObject.audioFile.buffer.duration;
-    if (audioObject.duration != undefined) {
-        // This override gets set when sfx are cramming for play time.
-        myDuration = audioObject.duration;
+    let myDuration = 1;
+
+    if (audioObject.audioFile.buffer === undefined) {
+        //TODO: Get the duration elsewhere
+        //
+    }
+    else {
+        // Return the milliseconds to wait before playing the next audio
+        myDuration = audioObject.audioFile.buffer.duration;
+        if (audioObject.duration != undefined) {
+            // This override gets set when sfx are cramming for play time.
+            myDuration = audioObject.duration;
+        }
     }
     return Math.floor(myDuration * 1000);
 }
@@ -426,7 +474,7 @@ class AudioFadeGroup {
         faderNode.gain.value = 1.0;
         faderNode.connect(volumeController);
         this.node = faderNode;
-        this.sources = [];
+        this.audioObjects = [];
         this.hasFade = false;
         this.isStopped = false;
     }
@@ -434,7 +482,7 @@ class AudioFadeGroup {
     isFresh() {
         if (this.isStopped) return false;
         if (this.hasFade) return false;
-        if (this.sources.length > 0) return false;
+        if (this.audioObjects.length > 0) return false;
         return true;
     }
 }
@@ -535,12 +583,12 @@ class AudioChannel {
         if (fader.isStopped) return;
         fader.isStopped = true;
 
-        const activeSources = fader.sources;
+        const activeAudioObjects = fader.audioObjects;
 
-        while (activeSources.length > 0) {
-            const source = activeSources.shift();
-            source.stop();
-            source.disconnect();
+        while (activeAudioObjects.length > 0) {
+            const audioObject = activeAudioObjects.shift();
+            audioObject.stop();
+            audioObject.disconnect();
         }
 
         fader.node.disconnect();
@@ -561,7 +609,7 @@ class AudioChannel {
         const activeFaders = [];
         for (let i = 0; i < this.faderGroups.length; i++) {
             const fader = this.faderGroups[i];
-            if (fader.sources.length === 0) continue;
+            if (fader.audioObjects.length === 0) continue;
             if (fader.isStopped) continue;
             if (fader.hasFade) continue;
             activeFaders.push(fader);
@@ -579,13 +627,16 @@ class AudioChannel {
                     let foundMatch = false;
                     for (let j = 0; j < activeFaders.length; j++) {
                         const compareFader = activeFaders[j];
-                        for (let k = 0; k < compareFader.sources.length; k++) {
-                            const compareSource = compareFader.sources[k];
-                            if (incomingAudio.audioFile.buffer != compareSource.audioFile.buffer) {
+                        for (let k = 0; k < compareFader.audioObjects.length; k++) {
+                            const compareAudio = compareFader.audioObjects[k];
+                            if (
+                                incomingAudio.audioFile.name
+                                != compareAudio.audioFile.name
+                            ) {
                                 // Already playing; move it to the new fader
                                 preservedAudio.push(incomingAudio);
                                 // Remove it from the old fader's list
-                                compareFader.sources.splice(k, 1);
+                                compareFader.audioObjects.splice(k, 1);
                                 foundMatch = true;
                                 break;
                             }
@@ -666,7 +717,7 @@ class AudioChannel {
 
     connect(audioObject, tailEnd) {
         const active = this.getActiveFader();
-        active.sources.push(audioObject.source);
+        active.audioObjects.push(audioObject);
         tailEnd.connect(active.node);
         audioObject.connectionTail = tailEnd;
         audioObject.faderGroup = active;

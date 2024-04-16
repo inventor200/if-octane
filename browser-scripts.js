@@ -53,7 +53,9 @@ class LiveRegionManager {
                 const requestedAudio = await createAudioObject(
                     audioContent.audioName, audioContent.options
                 )
-                this.audioQueue.push(requestedAudio);
+                if (requestedAudio) {
+                    this.audioQueue.push(requestedAudio);
+                }
             }
             else {
                 this.audioQueue.push(audioContent);
