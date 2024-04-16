@@ -4,11 +4,15 @@ mkdir -p "$IF_OCTANE_ENGINE_PATH/precrunch"
 mkdir -p "$IF_OCTANE_ENGINE_PATH/cache"
 
 USE_DEBUG_MODE=0
+USE_RECYCLE_MODE=0
 for BUILD_ARG in "$@" 
 do
     if [ "$BUILD_ARG" = "-d" ]; then
         USE_DEBUG_MODE=1
         echo "Running in debug mode; no uglifying will be performed"
+    elif [ "$BUILD_ARG" = "-f" ]; then
+        USE_RECYCLE_MODE=1
+        echo "Running in recycle mode; no asset files will be modified"
     fi
 done
 
@@ -136,7 +140,7 @@ recursiveDump() {
 
 if [ $USE_EMBEDDING -eq 0 ]; then
     echo "This project will not use embedding."
-else
+elif [ $USE_RECYCLE_MODE -eq 0 ]; then
     echo "Building embedded manifest..."
 
     # Write the manifest file
