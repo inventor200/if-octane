@@ -104,7 +104,6 @@ if ! [ -d "$OUT_DIR" ]; then
 fi
 
 EMBED_PATH="$IF_OCTANE_PROJ_SRC/embed"
-EMBED_PATH_EXTRA="$EMBED_PATH/"
 
 DUMP_PATH="$IF_OCTANE_ENGINE_PATH/cache/dump"
 
@@ -120,7 +119,7 @@ recursiveFind() {
         if [ -d "$i" ]; then
             recursiveFind "$i"
         elif [ -f "$i" ]; then
-            ASSET_PATH=${i#"$EMBED_PATH_EXTRA"}
+            ASSET_PATH=${i#"$EMBED_PATH/"}
             ASSET_SIZE=$(stat -c%s "$i")
             echo -n "{len:$ASSET_SIZE, path:\"$ASSET_PATH\"},"
         fi
