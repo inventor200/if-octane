@@ -214,8 +214,16 @@ function autoBind(obj) {
     return obj;
 }
 
-function armButton(func) {
-    if_octane_button_function_queue.push(autoBind(func));
+function armButton(actionFunction) {
+    if_octane_button_function_queue.push(autoBind(actionFunction));
+}
+
+function armButtonSimply(func) {
+    if_octane_button_function_queue.push(autoBind({
+        turnCost: 0,
+        verify: null,
+        execute: func
+    }));
 }
 
 //TODO: Implement a method for generating context-ful inline action tags.

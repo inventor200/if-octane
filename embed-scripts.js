@@ -29,6 +29,13 @@ function if_octane_tryReady() {
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 const if_octane_audio_context = new AudioContext();
 
+const AUDIO_CHANNEL_UI = 0;
+const AUDIO_CHANNEL_FOREGROUND = 1;
+const AUDIO_CHANNEL_BACKGROUND = 2;
+const AUDIO_CHANNEL_MUSIC = 3;
+
+const AUDIO_SILENCE = 'octane-core/silence';
+
 //FIXME: This is for debug only!!
 function estimateAudioSize(audioBuffer) {
     let byteSize = 0;
@@ -242,13 +249,6 @@ function if_octane_release_prep_memory() {
     GAME_INFO.embeddedManifest = null;
 }
 
-const AUDIO_CHANNEL_UI = 0;
-const AUDIO_CHANNEL_FOREGROUND = 1;
-const AUDIO_CHANNEL_BACKGROUND = 2;
-const AUDIO_CHANNEL_MUSIC = 3;
-
-const AUDIO_SILENCE = 'octane-core/silence';
-
 function if_octane_fetch_audio_file(audioName) {
     if (audioName === AUDIO_SILENCE) {
         console.error('Attempted to fetch silence!');
@@ -325,7 +325,7 @@ class OctaneAudioObject {
         if (this.isPlaying) return;
         source.start();
         this.isPlaying = true;
-        console.log("play");
+        //TODO: Handle looping
     }
     stop() {
         const source = this.getSource();
@@ -429,17 +429,26 @@ class OctaneLongAudioObject extends OctaneAudioObject {
     }
 }
 
-async function createAudioObject(audioName, options) {
+function normalizeAudioChannel(possibleChannel, audioFile) {
+    if (audioFile) {
+        if (audioFile.defaultChannel) {
+            return audioFile.defaultChannel;
+        }
+    }
+    return possibleChannel;
+}
+
+function normalizeAudioOptions(options, audioFile) {
     if (options === undefined) {
-        options = {
-            channel: AUDIO_CHANNEL_UI,
+        return {
+            channel: normalizeAudioChannel(AUDIO_CHANNEL_UI, audioFile),
             distance: 0,
             muffle: 0
         }
     }
 
     if (options.channel === undefined) {
-        options.channel = AUDIO_CHANNEL_UI;
+        options.channel = normalizeAudioChannel(AUDIO_CHANNEL_UI, audioFile);
     }
 
     if (options.distance === undefined) {
@@ -450,13 +459,19 @@ async function createAudioObject(audioName, options) {
         options.muffle = 0;
     }
 
+    return options;
+}
+
+async function createAudioObject(audioName, options) {
     if (audioName === AUDIO_SILENCE) {
-        return new OctaneSilenceObject(options);
+        return new OctaneSilenceObject(normalizeAudioOptions(options));
     }
 
     const audioFile = if_octane_fetch_audio_file(audioName);
 
     if (audioFile === undefined) return null;
+
+    options = normalizeAudioOptions(options, audioFile);
 
     let audioObj;
 
@@ -498,6 +513,11 @@ function setAudioFineVolume(audioName, fineVolume) {
     audioFile.fineVolume = fineVolume;
 }
 
+function setAudioDefaultChannel(audioName, defaultChannel) {
+    const audioFile = if_octane_fetch_audio_file(audioName);
+    audioFile.defaultChannel = defaultChannel;
+}
+
 function playAudioFromObject(audioObject) {
     if (if_octane_audio_context.state === "suspended") {
         if_octane_audio_context.resume();
@@ -532,19 +552,15 @@ function playAudioFromObject(audioObject) {
         if_octane_music_channel.connect(audioObject, tailEnd);
     }
     else {
-        if_octane_background_channel.connect(audioObject, tailEnd);
+        let customFader = undefined;
+        if (!audioObject.isLoop()) {
+            // Specifically connect this sound to the latest random background fader
+            customFader = if_octane_background_channel.getActiveFader(true);
+        }
+        if_octane_background_channel.connect(audioObject, tailEnd, customFader);
     }
 
-    if (
-        audioObject.channel === AUDIO_CHANNEL_BACKGROUND &&
-        !audioObject.isLoop()
-    ) {
-        //TODO: Handle randomly-playing background sound
-    }
-    else {
-        //TODO: Handle looping sounds
-        audioObject.start();
-    }
+    audioObject.start();
 
     // Return the milliseconds to wait before playing the next audio
     return Math.floor(audioObject.getDuration() * 1000);
@@ -565,6 +581,7 @@ class AudioFadeGroup {
         if (this.isStopped) return false;
         if (this.hasFade) return false;
         if (this.audioObjects.length > 0) return false;
+        if (this.randomBackgroundBatchID != undefined) return false;
         return true;
     }
 }
@@ -585,10 +602,36 @@ class AudioChannel {
         this.volumeController.gain.value = newVolume;
     }
 
-    getActiveFader() {
+    getActiveFader(getRandomBackgroundFader=false) {
         if (this.faderGroups.length === 0) return undefined;
 
-        return this.faderGroups[this.faderGroups.length - 1];
+        if (getRandomBackgroundFader) {
+            for (let i = this.faderGroups.length - 1; i >= 0; i--) {
+                const faderGroup = this.faderGroups[i];
+                if (
+                    faderGroup.randomBackgroundBatchID
+                    === if_octane_random_background_batch_id
+                ) {
+                    return faderGroup;
+                }
+            }
+            const newRandomFader = new AudioFadeGroup(this.volumeController);
+            newRandomFader.randomBackgroundBatchID = if_octane_random_background_batch_id;
+            this.faderGroups.push(newRandomFader);
+            return newRandomFader;
+        }
+        else {
+            for (let i = this.faderGroups.length - 1; i >= 0; i--) {
+                const faderGroup = this.faderGroups[i];
+                if (
+                    faderGroup.randomBackgroundBatchID === undefined
+                ) {
+                    return faderGroup;
+                }
+            }
+        }
+
+        return undefined;
     }
 
     reload() {
@@ -603,12 +646,13 @@ class AudioChannel {
                 return;
             }
         }
+
         this.faderGroups.push(new AudioFadeGroup(this.volumeController));
     }
 
-    getNewFader() {
+    getNewFader(getRandomBackgroundFader=false) {
         this.reload();
-        return this.getActiveFader();
+        return this.getActiveFader(getRandomBackgroundFader);
     }
 
     fadeOut(batchObj, referenceNow) {
@@ -688,6 +732,18 @@ class AudioChannel {
         this.sendToGC();
     }
 
+    getCurrentlyActiveFaders() {
+        const activeFaders = [];
+        for (let i = 0; i < this.faderGroups.length; i++) {
+            const fader = this.faderGroups[i];
+            if (fader.audioObjects.length === 0) continue;
+            if (fader.isStopped) continue;
+            if (fader.hasFade) continue;
+            activeFaders.push(fader);
+        }
+        return activeFaders;
+    }
+
     syncPlayingSounds(audioObjectList) {
         if (audioObjectList.length === 0) {
             this.forceNewEnvironment = false;
@@ -697,14 +753,7 @@ class AudioChannel {
         const isSilence = audioObjectList[audioObjectList.length - 1].isSilence;
 
         // Collect list of currently-active faders
-        const activeFaders = [];
-        for (let i = 0; i < this.faderGroups.length; i++) {
-            const fader = this.faderGroups[i];
-            if (fader.audioObjects.length === 0) continue;
-            if (fader.isStopped) continue;
-            if (fader.hasFade) continue;
-            activeFaders.push(fader);
-        }
+        const activeFaders = this.getCurrentlyActiveFaders();
 
         // Audio that gets transferred to the new fader
         const preservedAudio = [];
@@ -714,15 +763,13 @@ class AudioChannel {
         let preservedFader;
 
         if (!isSilence) {
-            console.log("Check sync");
-            console.log("Force new: " + this.forceNewEnvironment);
-            console.log("Active faders: " + activeFaders.length);
             if (!this.forceNewEnvironment && activeFaders.length > 0) {
                 for (let i = 0; i < audioObjectList.length; i++) {
                     const incomingAudio = audioObjectList[i];
                     let foundMatch = false;
                     for (let j = 0; j < activeFaders.length; j++) {
                         const compareFader = activeFaders[j];
+                        if (compareFader.randomBackgroundBatchID != undefined) continue;
                         for (let k = 0; k < compareFader.audioObjects.length; k++) {
                             const compareAudio = compareFader.audioObjects[k];
                             if (
@@ -788,6 +835,13 @@ class AudioChannel {
             if (checkedFader === preservedFader) continue;
             // Don't fade out the new fader!
             if (checkedFader === newFader) continue;
+            // Make sure random backgrounds are treated well
+            if (
+                checkedFader.randomBackgroundBatchID
+                === if_octane_random_background_batch_id
+            ) {
+                continue;
+            }
             referenceNow = this.fadeOut({ fader: checkedFader }, referenceNow);
         }
 
@@ -801,6 +855,23 @@ class AudioChannel {
         }
 
         this.forceNewEnvironment = false;
+    }
+
+    handleRandomBackgroundFade() {
+        const activeFaders = this.getCurrentlyActiveFaders();
+        let referenceNow = undefined;
+
+        for (let i = 0; i < activeFaders.length; i++) {
+            const checkedFader = activeFaders[i];
+            if (checkedFader.randomBackgroundBatchID === undefined) continue;
+            if (
+                checkedFader.randomBackgroundBatchID
+                === if_octane_random_background_batch_id
+            ) {
+                continue;
+            }
+            referenceNow = this.fadeOut({ fader: checkedFader }, referenceNow);
+        }
     }
 
     sendToGC() {
@@ -854,12 +925,15 @@ function if_octane_arm_default_sound(audioName) {
     if_octane_current_default_sound = audioName;
 }
 
+var if_octane_random_background_batch_id = 0;
+
 // This gets called when changing between locations different enough to
 // change how audio is perceived. In simpler situations, this is called
 // when moving from one room to another.
 function if_octane_arm_new_background_environment(environmentAudioProfile) {
     if_octane_pass_background_environment();
     if_octane_background_channel.forceNewEnvironment = true;
+    if_octane_random_background_batch_id++;
     //TODO: Use information in the profile to inform how effects will be applied.
 }
 
@@ -868,6 +942,7 @@ function if_octane_sync_background_audio(audioObjectList) {
 
     let backgroundToSilence = undefined;
     const backgroundList = [];
+    const backgroundRandomList = [];
     let musicToSilence = undefined;
     const musicList = [];
 
@@ -884,18 +959,27 @@ function if_octane_sync_background_audio(audioObjectList) {
         }
 
         if (obj.channel === AUDIO_CHANNEL_BACKGROUND && !backgroundToSilence) {
-            backgroundList.push(obj);
+            if (obj.isLoop()) {
+                backgroundList.push(obj);
+            }
+            else {
+                backgroundRandomList.push(obj);
+            }
         }
         else if (!musicToSilence) {
             musicList.push(obj);
         }
     }
 
+    let randomFadeHandled = false;
+
     if (backgroundToSilence) {
         if_octane_background_channel.syncPlayingSounds(backgroundToSilence);
+        randomFadeHandled = true;
     }
     else if (backgroundList.length > 0) {
         if_octane_background_channel.syncPlayingSounds(backgroundList);
+        randomFadeHandled = true;
     }
 
     if (musicToSilence) {
@@ -903,5 +987,17 @@ function if_octane_sync_background_audio(audioObjectList) {
     }
     else if (musicList.length > 0) {
         if_octane_music_channel.syncPlayingSounds(musicList);
+    }
+
+    const newBackgroundCount = backgroundList.length + backgroundRandomList.length;
+
+    if (!backgroundToSilence && newBackgroundCount > 0) {
+        if_octane_random_background_batch_id++;
+        //TODO: Prepare the random-background-sound system with new batch
+    }
+
+    if (!randomFadeHandled) {
+        // Make sure fade-out is handled for old random background sounds
+        if_octane_background_channel.handleRandomBackgroundFade();
     }
 }
