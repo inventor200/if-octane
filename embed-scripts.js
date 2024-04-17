@@ -688,7 +688,6 @@ class AudioChannel {
         this.sendToGC();
     }
 
-    //TODO: Set up a test case for this
     syncPlayingSounds(audioObjectList) {
         if (audioObjectList.length === 0) {
             this.forceNewEnvironment = false;
