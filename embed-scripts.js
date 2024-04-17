@@ -1,5 +1,7 @@
 // This is for anything that uses browser and embedding.
 
+var if_octane_long_audio_bank = null;
+
 var if_octane_embed_ready = false;
 var if_octane_window_ready = false;
 var if_octane_doneReady = false;
@@ -27,11 +29,6 @@ function if_octane_tryReady() {
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 const if_octane_audio_context = new AudioContext();
 
-//TODO: We might need to split up larger audio files into segments.
-// A way to possibly do this in bash is below:
-// https://superuser.com/questions/525210/splitting-an-audio-file-into-chunks-of-a-specified-length
-// From there, we just need to understand a series of segment files as
-// a whole track for streaming.
 //FIXME: This is for debug only!!
 function estimateAudioSize(audioBuffer) {
     let byteSize = 0;
@@ -190,6 +187,8 @@ function if_octane_load_files() {
                 mime: assetProfile.mime,
                 buffer: assetProfile.buffer,
                 isDecoded: false,
+                isLoop: false,
+                isLong: false,
                 priority: 0
             });
         }
@@ -275,6 +274,7 @@ class OctaneAudioObject {
         this.priorityOffset = 0;
         this.distance = options.distance;
         this.muffle = options.muffle;
+        this.isPlaying = false;
     }
     getPriority() {
         return this.audioFile.priority + this.priorityOffset;
@@ -287,19 +287,24 @@ class OctaneAudioObject {
     randomFrequency() {
         return this.audioFile.randomFrequency;
     }
+    getDuration() {
+        if (this.duration != undefined) {
+            return this.duration;
+        }
+        return this.audioFile.decodedBuffer.duration;
+    }
     async decode() {
         if (!this.audioFile.isDecoded) {
-            console.log("Before: " + estimateAudioSize(this.audioFile.buffer));
-            const decoded = await if_octane_audio_context.decodeAudioData(
-                this.audioFile.buffer
+            this.cloneBuffer();
+            this.audioFile.decodedBuffer = await if_octane_audio_context.decodeAudioData(
+                this.bufferCopy
             );
-            console.log("After: " + estimateAudioSize(decoded));
-            this.audioFile.buffer = decoded;
+            this.bufferCopy = undefined;
             this.audioFile.isDecoded = true;
         }
 
         this.source = if_octane_audio_context.createBufferSource();
-        this.source.buffer = this.audioFile.buffer;
+        this.source.buffer = this.audioFile.decodedBuffer;
     }
     getSource() {
         return this.source;
@@ -308,20 +313,35 @@ class OctaneAudioObject {
         // This is the part which connects to the tail
         return this.getSource();
     }
+    getConnectionTail() {
+        if (!this.connectionTail) {
+            return this.getKnuckle();
+        }
+        return this.connectionTail;
+    }
     start() {
         const source = this.getSource();
         if (source === undefined) return;
+        if (this.isPlaying) return;
         source.start();
+        this.isPlaying = true;
+        console.log("play");
     }
     stop() {
         const source = this.getSource();
         if (source === undefined) return;
+        if (!this.isPlaying) return;
         source.stop();
+        this.isPlaying = false;
     }
     disconnect() {
         const source = this.getSource();
         if (source === undefined) return;
         source.disconnect();
+    }
+    cloneBuffer() {
+        this.bufferCopy = new ArrayBuffer(this.audioFile.buffer.byteLength);
+        new Uint8Array(this.bufferCopy).set(new Uint8Array(this.audioFile.buffer));
     }
 }
 
@@ -343,6 +363,69 @@ class OctaneSilenceObject extends OctaneAudioObject {
     }
     async decode() {
         // Do nothing
+    }
+}
+
+class OctaneLongAudioObject extends OctaneAudioObject {
+    constructor(audioFile, options) {
+        super(audioFile, options);
+    }
+    async decode() {
+        if (if_octane_long_audio_bank === null) {
+            if_octane_long_audio_bank = document.getElementById("long-audio-bank");
+        }
+
+        if (!this.audioFile.isDecoded) {
+            this.cloneBuffer();
+            const blob = new Blob([this.bufferCopy], {
+                type: this.audioFile.mime
+            });
+            this.bufferCopy = undefined;
+            this.audioFile.blob = blob;
+            this.audioFile.url = URL.createObjectURL(this.audioFile.blob);
+            this.audioFile.isDecoded = true;
+        }
+
+        this.createBankElement();        
+    }
+    createBankElement() {
+        if (!this.audioElement) {
+            if (this.source) {
+                this.source.disconnect();
+                this.source = undefined;
+            }
+            this.audioElement = document.createElement('audio');
+            this.audioElement.src = this.audioFile.url;
+            if_octane_long_audio_bank.appendChild(this.audioElement);
+            this.audioElement.loop = this.isLoop();
+        }
+        if (!this.source) {
+            this.source = if_octane_audio_context.createMediaElementSource(
+                this.audioElement
+            );
+        }
+    }
+    getDuration() {
+        if (this.duration != undefined) {
+            return this.duration;
+        }
+        if (!this.audioElement) {
+            return 120;
+        }
+        return this.audioElement.duration;
+    }
+    start() {
+        this.createBankElement();  
+        const element = this.audioElement;
+        if (!element.paused) return;
+        element.play();
+    }
+    stop() {
+        const element = this.audioElement;
+        if (element === undefined) return;
+        element.pause();
+        element.remove();
+        this.audioElement = undefined;
     }
 }
 
@@ -375,7 +458,14 @@ async function createAudioObject(audioName, options) {
 
     if (audioFile === undefined) return null;
 
-    const audioObj = new OctaneAudioObject(audioFile, options);
+    let audioObj;
+
+    if (audioFile.isLong) {
+        audioObj = new OctaneLongAudioObject(audioFile, options);
+    }
+    else {
+        audioObj = new OctaneAudioObject(audioFile, options);
+    }
 
     await audioObj.decode();
 
@@ -396,6 +486,11 @@ function setAudioRandomFrequency(audioName, randomFrequency) {
 function setAudioLoopStatus(audioName, isLoop) {
     const audioFile = if_octane_fetch_audio_file(audioName);
     audioFile.isLoop = isLoop;
+}
+
+function setAudioLongStatus(audioName, isLong) {
+    const audioFile = if_octane_fetch_audio_file(audioName);
+    audioFile.isLong = isLong;
 }
 
 function setAudioFineVolume(audioName, fineVolume) {
@@ -451,21 +546,8 @@ function playAudioFromObject(audioObject) {
         audioObject.start();
     }
 
-    let myDuration = 1;
-
-    if (audioObject.audioFile.buffer === undefined) {
-        //TODO: Get the duration elsewhere
-        //
-    }
-    else {
-        // Return the milliseconds to wait before playing the next audio
-        myDuration = audioObject.audioFile.buffer.duration;
-        if (audioObject.duration != undefined) {
-            // This override gets set when sfx are cramming for play time.
-            myDuration = audioObject.duration;
-        }
-    }
-    return Math.floor(myDuration * 1000);
+    // Return the milliseconds to wait before playing the next audio
+    return Math.floor(audioObject.getDuration() * 1000);
 }
 
 class AudioFadeGroup {
@@ -536,23 +618,27 @@ class AudioChannel {
 
         fader.hasFade = true;
 
-        if (!referenceNow) {
+        if (referenceNow === undefined) {
             // Set the start time of the fade
             fader.node.gain.setValueAtTime(
                 1.0, if_octane_audio_context.currentTime
             );
             referenceNow = if_octane_audio_context.currentTime;
         }
+        else {
+            // Set the start time of the fade
+            fader.node.gain.setValueAtTime(
+                1.0, referenceNow
+            );
+        }
 
         // Start the fade
         fader.node.gain.linearRampToValueAtTime(
-            0, referenceNow + 0.5
+            0.0, referenceNow + 0.5
         );
 
         const _this = this;
-        setTimeout(() => { _this.stop({
-            fader: fader
-        }); }, 500);
+        setTimeout(() => { _this.stop(batchObj); }, 500);
 
         return referenceNow;
     }
@@ -562,12 +648,18 @@ class AudioChannel {
         if (fader.isStopped) return;
         if (fader.hasFade) return;
 
-        if (!referenceNow) {
+        if (referenceNow === undefined) {
             // Set the start time of the fade
             fader.node.gain.setValueAtTime(
                 0.0, if_octane_audio_context.currentTime
             );
             referenceNow = if_octane_audio_context.currentTime;
+        }
+        else {
+            // Set the start time of the fade
+            fader.node.gain.setValueAtTime(
+                0.0, referenceNow
+            );
         }
 
         // Start the fade
@@ -620,7 +712,12 @@ class AudioChannel {
         // Audio that is brand-new
         const newAudio = [];
 
+        let preservedFader;
+
         if (!isSilence) {
+            console.log("Check sync");
+            console.log("Force new: " + this.forceNewEnvironment);
+            console.log("Active faders: " + activeFaders.length);
             if (!this.forceNewEnvironment && activeFaders.length > 0) {
                 for (let i = 0; i < audioObjectList.length; i++) {
                     const incomingAudio = audioObjectList[i];
@@ -631,12 +728,15 @@ class AudioChannel {
                             const compareAudio = compareFader.audioObjects[k];
                             if (
                                 incomingAudio.audioFile.name
-                                != compareAudio.audioFile.name
+                                === compareAudio.audioFile.name
                             ) {
                                 // Already playing; move it to the new fader
-                                preservedAudio.push(incomingAudio);
+                                preservedAudio.push(compareAudio);
                                 // Remove it from the old fader's list
                                 compareFader.audioObjects.splice(k, 1);
+                                // Remove the redundant attempt
+                                incomingAudio.stop();
+                                incomingAudio.disconnect();
                                 foundMatch = true;
                                 break;
                             }
@@ -657,14 +757,16 @@ class AudioChannel {
                 }
             }
 
-            const preservedFader = this.getNewFader();
+            if (preservedAudio.length > 0) {
+                preservedFader = this.getNewFader();
 
-            // Do the move
-            for (let i = 0; i < preservedAudio.length; i++) {
-                const audioObject = preservedAudio[i];
-                const tailEnd = audioObject.connectionTail;
-                tailEnd.disconnect();
-                preservedFader.connect(audioObject, tailEnd);
+                // Do the move
+                for (let i = 0; i < preservedAudio.length; i++) {
+                    const audioObject = preservedAudio[i];
+                    const tailEnd = audioObject.getConnectionTail();
+                    tailEnd.disconnect();
+                    this.connect(audioObject, tailEnd, preservedFader);
+                }
             }
         }
 
@@ -682,7 +784,12 @@ class AudioChannel {
 
         // Transition
         for (let i = 0; i < activeFaders.length; i++) {
-            referenceNow = this.fadeOut({ fader: activeFaders[i] }, referenceNow);
+            const checkedFader = activeFaders[i];
+            // Don't fade out the preserved fader!
+            if (checkedFader === preservedFader) continue;
+            // Don't fade out the new fader!
+            if (checkedFader === newFader) continue;
+            referenceNow = this.fadeOut({ fader: checkedFader }, referenceNow);
         }
 
         if (newFader) {
@@ -715,12 +822,23 @@ class AudioChannel {
         }
     }
 
-    connect(audioObject, tailEnd) {
-        const active = this.getActiveFader();
-        active.audioObjects.push(audioObject);
-        tailEnd.connect(active.node);
+    connect(audioObject, tailEnd, preferredFader) {
+        if (!preferredFader) {
+            preferredFader = this.getActiveFader();
+        }
+        let isRegistered = false;
+        for (let i = 0; i < preferredFader.audioObjects.length; i++) {
+            if (preferredFader.audioObjects[i] === audioObject) {
+                isRegistered = true;
+                break;
+            }
+        }
+        if (!isRegistered) {
+            preferredFader.audioObjects.push(audioObject);
+        }
+        tailEnd.connect(preferredFader.node);
         audioObject.connectionTail = tailEnd;
-        audioObject.faderGroup = active;
+        audioObject.faderGroup = preferredFader;
     }
 }
 

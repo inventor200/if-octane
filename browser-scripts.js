@@ -125,7 +125,7 @@ class LiveRegionManager {
                         // If a sound has a long tail or something, then
                         // we're gonna assume the important content appears
                         // within one second.
-                        let simpleDuration = survivingSound.audioFile.buffer.duration;
+                        let simpleDuration = survivingSound.getDuration();
                         if (simpleDuration > IF_OCTANE_RUDE_DURATION_THRESHOLD) {
                             simpleDuration = IF_OCTANE_RUDE_DURATION_THRESHOLD;
                         }
@@ -238,7 +238,7 @@ class LiveRegionManager {
 
                 // Measure the total duration of the audio queue
                 for (let i = 0; i < this.audioQueue.length; i++) {
-                    audioQueueDuration += this.audioQueue[i].audioFile.buffer.duration;
+                    audioQueueDuration += this.audioQueue[i].getDuration();
                 }
 
                 useFade = (audioQueueDuration >= 2.5);
@@ -255,7 +255,7 @@ class LiveRegionManager {
 
                 for (let i = 0; i < this.audioQueue.length; i++) {
                     const sound = this.audioQueue[i];
-                    const myDuration = sound.audioFile.buffer.duration;
+                    const myDuration = sound.getDuration();
                     if (myDuration < IF_OCTANE_RUDE_DURATION_THRESHOLD) {
                         rudeDuration -= myDuration;
                     }
