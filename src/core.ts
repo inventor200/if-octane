@@ -69,6 +69,10 @@ export class CoreClass {
         return this._instance || (this._instance = new this());
     }
 
+    public get hasStarted() {
+        return this.started;
+    }
+
     public get assets() : AbstractAssetManager {
         if (this._assets === null) {
             throw new OctaneGameError(
@@ -118,6 +122,7 @@ export class CoreClass {
     public start(callback : () => void) : void {
         if (this.started) return;
         this.started = true;
+        //TODO: Save init state for restarts?
         startMainLoop();
         WaitFor.Player(() => {
             Clock.finishPreGame();

@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { OctaneGameError } from "./exceptions";
+import { Database } from './data';
 import { FIRST_TURN_TITLE } from './miscTools';
 import { PrintHandler } from "./platform/ui/printHandler";
 
@@ -22,10 +22,12 @@ export class ClockClass {
     private static _instance : ClockClass;
 
     private _currentTurn : number;
+    private _currentSubStep : number;
     private inPregame : boolean;
 
     constructor() {
         this._currentTurn = -1;
+        this._currentSubStep = 0;
         this.inPregame = true;
     }
 
@@ -33,7 +35,11 @@ export class ClockClass {
         return this._instance || (this._instance = new this());
     }
 
-    public get currentTurn() {
+    public get turn() {
+        return this._currentTurn;
+    }
+
+    public get subStep() {
         return this._currentTurn;
     }
 
@@ -45,31 +51,24 @@ export class ClockClass {
         this.advanceTurn(turnNumber - this._currentTurn);
     }
 
-    public advanceTurn(count : number) {
-        const oldTurn = this._currentTurn;
-        const destTurn = oldTurn + count;
-        if (count > 0) {
-            for (let i = oldTurn; i < destTurn; i++) {
-                this.advanceTurnOnceForward();
-            }
+    public advanceTurn(turns : number) {
+        if (turns === 0) {
+            //TODO: Run substep
+            this._currentSubStep++;
         }
-        else if (count < 0) {
-            for (let i = oldTurn; i > destTurn; i--) {
-                this.advanceTurnOnceBackward();
+        else if (turns > 0) {
+            for (let i = 0; i < turns; i++) {
+                this.advanceTurnOnceForward();
             }
         }
     }
 
     private advanceTurnOnceForward() {
         if (this.inPregame) return;
-        this._currentTurn++;
         //TODO: Increment
-    }
-
-    private advanceTurnOnceBackward() {
-        if (this.inPregame) return;
-        this._currentTurn--;
-        //TODO: Undo
+        Database.runUpdates();
+        this._currentTurn++;
+        this._currentSubStep = 0;
     }
 
     public finishPreGame() {

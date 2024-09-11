@@ -16,6 +16,7 @@
 
 import { PrintHandler, NodeTurnBlock } from "./printHandler";
 import { WaitFor } from "../../../common/waitForPlayer";
+import { Clock } from "../../../common/clock";
 import { KeyStroke, getKey } from "./keyStroke";
 
 const simpleScrollAmount = 3;
@@ -113,6 +114,7 @@ class NodeInterfaceClass {
         if (WaitFor.waitingForPlayer) {
             WaitFor.waitingForPlayer = false;
             WaitFor.disarm();
+            Clock.advanceTurn(0);
             return;
         }
     }
