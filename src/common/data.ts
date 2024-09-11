@@ -17,6 +17,11 @@
 import { OctaneGameError } from "./exceptions";
 import { Core } from "../core";
 
+export type OctaneProperty = null | number | string | boolean | OctaneObject |
+    number[] | string[] | boolean[] | OctaneObject[];
+
+export const SPECIAL_TAG = "octane.special";
+
 export class DatabaseClass {
     public static _instance : DatabaseClass;
 
@@ -24,13 +29,10 @@ export class DatabaseClass {
     private startFunctions : Map<string, () => void>;
     private updateFunctions : Map<string, () => void>;
 
-    private objects : OctaneObject[];
+    private objects : Map<number, OctaneObject>;
+    private highestObjectIndex : number;
     private intactObjects : OctaneObject[]; // Objects not destroyed
     private livingObjects : OctaneObject[]; // Objects with an update method
-    // Objects with a special meaning/purpose
-    private specialObjects : OctaneObject[];
-    // Objects suspected of being destroyed for GC
-    private suspiciousLoners : OctaneObject[];
 
     // Specials
     private rootHolderOfAll : OctaneObject;
@@ -51,19 +53,20 @@ export class DatabaseClass {
     private transientSafety : OctaneObject[];
 
     constructor() {
-        this.awakeFunctions = new Map<string, (argumentObj : any) => void>;
+        this.awakeFunctions = new Map<string, (argumentObj : object) => void>;
         this.startFunctions = new Map<string, () => void>;
         this.updateFunctions = new Map<string, () => void>;
-        this.objects = [];
+        this.objects = new Map<number, OctaneObject>();
+        this.highestObjectIndex = 0;
         this.intactObjects = [];
         this.livingObjects = [];
-        this.suspiciousLoners = [];
         this.transientSafety = [];
         // This is the root of the world model
         this.rootHolderOfAll = new OctaneObject(
             "octane.special.rootHolderOfAll", {}
         );
         this.rootHolderOfAll.markTransient();
+        this.rootHolderOfAll.tag(SPECIAL_TAG);
         // This object takes up indices to mark that
         // index as a destroyed object, allowing the
         // actual object to be disposed of by GC.
@@ -71,10 +74,7 @@ export class DatabaseClass {
             "octane.special.destroyedPlaceholder", {}
         );
         this.destroyedPlaceholder.markTransient();
-        this.specialObjects = [
-            this.rootHolderOfAll,
-            this.destroyedPlaceholder
-        ];
+        this.destroyedPlaceholder.tag(SPECIAL_TAG);
     }
 
     public static get Instance() {
@@ -100,23 +100,17 @@ export class DatabaseClass {
         }
     }
 
-    public flagForSuspiciousLoneliness(obj : OctaneObject) : void {
-        for (let i = 0; i < this.suspiciousLoners.length; i++) {
-            if (this.suspiciousLoners[i] === obj) return;
-        }
-        this.suspiciousLoners.push(obj);
-    }
-
     public solidify() {
         //TODO: Review pending disconnections and destructions.
         // Also review suspiciousLoners contents for potential destroyed loners
     }
 
     public register(
-        obj : OctaneObject, creationRecipeName : string, argumentObj : any
+        obj : OctaneObject, creationRecipeName : string, argumentObj : object
     ) : number {
         const returnIndex = this.top();
-        this.objects.push(obj);
+        this.highestObjectIndex++;
+        this.objects.set(returnIndex, obj);
         this.intactObjects.push(obj);
 
         const awakeFunc = this.awakeFunctions.get(creationRecipeName);
@@ -151,7 +145,7 @@ export class DatabaseClass {
 
     public defineNewObjectRecipe(
         recipeName : string,
-        awakeFunction : (argumentObj : any) => void,
+        awakeFunction : (argumentObj : object) => void,
         startFunction? : () => void,
         updateFunction? : () => void
     ) {
@@ -178,7 +172,9 @@ export class DatabaseClass {
         if (!this.knows(index)) {
             return null;
         }
-        return this.objects[index];
+        const ret = this.objects.get(index);
+        if (ret === undefined) return null;
+        return ret;
     }
 
     public get ROOT_HOLDER_OF_ALL() {
@@ -190,25 +186,35 @@ export class DatabaseClass {
     }
 
     public top() : number {
-        return this.objects.length;
+        return this.highestObjectIndex;
     }
 
     public isRootHolder(target : OctaneObject | number) {
         const targetIndex = this.getIndexOf(target);
         // The root is the first thing to be made; this shouldn't happen
-        if (targetIndex >= this.objects.length) return false;
+        if (targetIndex >= this.top()) return false;
         return this.objects[targetIndex] === this.rootHolderOfAll;
     }
 
+    //TODO: Now that we switched to a map, we might not need a
+    //      whole object for tracking destructions, yeah?
     public isDestroyed(target : OctaneObject | number) {
         const targetIndex = this.getIndexOf(target);
         // Dissuade code from considering destroyed objects as non-null
-        if (targetIndex >= this.objects.length) return true;
-        return this.objects[targetIndex] === this.destroyedPlaceholder;
+        if (targetIndex >= this.top()) return true;
+        const fetched = this.objects.get(targetIndex);
+        if (fetched === undefined) return true;
+        return fetched === this.destroyedPlaceholder;
     }
 
     public isSpecial(target : OctaneObject | number) {
-        return this.getIndexOf(target) < this.specialObjects.length;
+        let obj : undefined | number | OctaneObject = target;
+        if ((typeof target) === 'number') {
+            obj = this.objects.get(target as number);
+            if (obj === undefined) return false;
+        }
+
+        return (obj as OctaneObject).hasTag(SPECIAL_TAG);
     }
 
     public getIndexOf(dataObj : number | OctaneObject) : number {
@@ -225,29 +231,27 @@ export class OctaneObject {
     private _location : OctaneObject | null;
     // Transient objects don't get wholesale-remade
     // when restarting or loading a game.
-    private _isTransient : boolean;
-    private dataTags : any; //TODO: Tag handler
+    private dataTags : Set<string>;
 
-    private dataProps : any;
+    private dataProps : Map<string, OctaneProperty>;
     private contents : OctaneObject[];
 
     // This can be pulled from the save for rebuilding
     private _creationRecipeName : string;
-    private _creationArgsCache : any;
+    private _creationArgsCache : object;
 
-    public awake : ((argumentObj : any) => void) | undefined;
+    public awake : ((argumentObj : object) => void) | undefined;
     public start : (() => void) | undefined;
     public update : (() => void) | undefined;
 
-    constructor(creationRecipeName : string, argumentObj : any) {
+    constructor(creationRecipeName : string, argumentObj : object) {
         this.dataIndex = Database.top();
         this._creationRecipeName = creationRecipeName;
         this._creationArgsCache = argumentObj;
         Database.register(this, creationRecipeName, argumentObj);
         this._location = null;
-        this._isTransient = false;
-        this.dataTags = {};
-        this.dataProps = {};
+        this.dataTags = new Set<string>();
+        this.dataProps = new Map<string, OctaneProperty>();
         this.contents = [];
         this.awake = undefined;
         this.start = undefined;
@@ -261,12 +265,12 @@ export class OctaneObject {
             );
         }
 
-        this._isTransient = true;
         Database.addTransient(this);
+        this.tag("transient");
     }
 
     public get isTransient() {
-        return this._isTransient;
+        return this.hasTag("transient");
     }
 
     public get location() : OctaneObject | null {
@@ -310,10 +314,10 @@ export class OctaneObject {
         return this._location.isIn(parent);
     }
 
-    // Is a lot more forgiving, but only handles one step
+    // Only handles one step
     public isChildOf(parent : OctaneObject) : boolean {
         if (this._location === null) return false;
-        return this._location.getDataIndex() === parent.getDataIndex();
+        return this._location === parent;
     }
 
     public isAlone() {
@@ -323,13 +327,6 @@ export class OctaneObject {
         }
         
         return this.isIn(Database.ROOT_HOLDER_OF_ALL);
-    }
-
-    public suspectOfLoneliness() : void {
-        if (this._isTransient) return; // Transients are not subject to GC
-        if (!this.isAlone()) return; // The map supports its existence
-
-        Database.flagForSuspiciousLoneliness(this);
     }
 
     public contains(obj : OctaneObject) {
@@ -368,32 +365,54 @@ export class OctaneObject {
         return this.badlyRemove(obj);
     }
 
-    public get(dataName : string) : any {
-        return this.dataProps[dataName];
+    // Property functions
+
+    private narrowProperty(dataName : string) : OctaneProperty {
+        const prop = this.dataProps.get(dataName);
+        if (prop === undefined) return null;
+        return prop;
+    }
+
+    public get(dataName : string) : OctaneProperty {
+        return this.narrowProperty(dataName);
     }
 
     public hasStrictly(dataName : string) : boolean {
-        return this.dataProps[dataName] != undefined;
+        return this.dataProps.get(dataName) != undefined;
     }
 
     public has(dataName : string) : boolean {
-        const value = this.dataProps[dataName];
+        const value = this.dataProps.get(dataName);
         return value != undefined || value != null;
     }
 
-    public set(dataName : string, value : any) {
-        this.dataProps[dataName] = value;
+    public set(dataName : string, value : OctaneProperty) {
+        this.dataProps.set(dataName, value);
     }
 
-    public compare(dataName : string, other : any) : boolean {
-        return this.dataProps[dataName] === other;
+    public compare(dataName : string, other : OctaneProperty) : boolean {
+        return this.narrowProperty(dataName) === other;
     }
 
-    public compareLoosely(dataName : string, other : any) : boolean {
-        return this.dataProps[dataName] == other;
+    public compareLoosely(dataName : string, other : OctaneProperty) : boolean {
+        return this.narrowProperty(dataName) == other;
     }
 
     public clear(dataName : string) : void {
-        this.dataProps[dataName] = undefined;
+        this.dataProps.delete(dataName);
+    }
+
+    public tag(tagName : string) : void {
+        if (this.dataTags.has(tagName)) return;
+        this.dataTags.add(tagName);
+    }
+
+    public untag(tagName : string) : void {
+        if (!this.dataTags.has(tagName)) return;
+        this.dataTags.delete(tagName);
+    }
+
+    public hasTag(tagName : string) : boolean {
+        return this.dataTags.has(tagName);
     }
 }
