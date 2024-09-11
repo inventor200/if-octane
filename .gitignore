@@ -4,3 +4,13 @@ cache/
 .vscode/
 Scripts/
 precrunch/
+node_modules/
+src/common/platform
+src/common/gameInfo.ts
+src/platforms/embed/ui
+src/platforms/embed/assets
+src/platforms/no-embed/ui
+src/platforms/no-embed/assets
+src/platforms/nodejs/assets
+src/notes.md
+.package-lock.json

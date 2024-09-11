@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-mkdir -p "$IF_OCTANE_ENGINE_PATH/precrunch"
-mkdir -p "$IF_OCTANE_ENGINE_PATH/cache"
-
 USE_DEBUG_MODE=0
 USE_RECYCLE_MODE=0
 for BUILD_ARG in "$@" 
@@ -25,8 +22,29 @@ if [[ -z "${IF_OCTANE_ENGINE_PATH}" ]]; then
     exit 1;
 fi
 
+mkdir -p "$IF_OCTANE_ENGINE_PATH/precrunch"
+mkdir -p "$IF_OCTANE_ENGINE_PATH/cache"
+
+# Automatically generate a tsconfig.json file in a project directory,
+# if one is not already there.
+TSCONFIG_FILE="$IF_OCTANE_PROJ_SRC/tsconfig.json"
+
+if ! [ -f "$TSCONFIG_FILE" ]; then
+    echo '{' > "$TSCONFIG_FILE"
+    echo '    "compilerOptions": {' >> "$TSCONFIG_FILE"
+    echo '        "target": "es2020",' >> "$TSCONFIG_FILE"
+    echo '        "strict": true,' >> "$TSCONFIG_FILE"
+    echo '        "paths": {' >> "$TSCONFIG_FILE"
+    echo -n '            "if-octane/*": ["' >> "$TSCONFIG_FILE"
+    echo -n "$IF_OCTANE_ENGINE_PATH" >> "$TSCONFIG_FILE"
+    echo -n '/src/*"]' >> "$TSCONFIG_FILE"
+    echo '        }' >> "$TSCONFIG_FILE"
+    echo '    }' >> "$TSCONFIG_FILE"
+    echo '}' >> "$TSCONFIG_FILE"
+fi
+
 INFO_FILENAME="info.txt"
-MAKE_LIST_FILENAME="js-list.txt"
+MAIN_FILENAME="main.ts"
 STYLE_FILENAME_BASE="style"
 STYLE_FILENAME_PRE="$STYLE_FILENAME_BASE.scss"
 STYLE_FILENAME="$STYLE_FILENAME_BASE.css"
@@ -35,8 +53,8 @@ if ! [ -f "$IF_OCTANE_PROJ_SRC/$STYLE_FILENAME_PRE" ]; then
     echo "WARNING: Project is missing: $STYLE_FILENAME_PRE"
 fi
 
-if ! [ -f "$IF_OCTANE_PROJ_SRC/$MAKE_LIST_FILENAME" ]; then
-    echo "ERROR: Project is missing: $MAKE_LIST_FILENAME"
+if ! [ -f "$IF_OCTANE_PROJ_SRC/$MAIN_FILENAME" ]; then
+    echo "ERROR: Project is missing: $MAIN_FILENAME"
     exit 1
 fi
 
@@ -253,32 +271,11 @@ if [ $USE_EMBEDDING -eq 1 ]; then
     echo 'if_octane_start_file_loading();' >> "$BUILT_JS.js"
 fi
 
-# Write custom scripts
-echo "Combining scripts..."
-while IFS="" read -r p || [ -n "$p" ]
-do
-    echo "    Including $p"
-    if [[ $a == /* ]]; then
-        if ! [ -f "$p" ]; then
-            echo "File not found: $p"
-            exit 1
-        fi
-        cat "$p" >> "$BUILT_JS.js"
-        echo "" >> "$BUILT_JS.js"
-    else
-        if ! [ -f "$IF_OCTANE_PROJ_SRC/$p" ]; then
-            echo "File not found: $IF_OCTANE_PROJ_SRC/$p"
-            exit 1
-        fi
-        cat "$IF_OCTANE_PROJ_SRC/$p" >> "$BUILT_JS.js"
-        echo "" >> "$BUILT_JS.js"
-    fi
-done < "$IF_OCTANE_PROJ_SRC/$MAKE_LIST_FILENAME"
+#TODO: Modify the rest of the build process to fit this
 
-if [ $USE_DEBUG_MODE -eq 0 ]; then
-    echo "Uglifying..."
-    uglifyjs "$BUILT_JS.js" -o "$BUILT_JS.min.js" -c drop_console -m toplevel
-fi
+# Build bundled JS
+export IF_OCTANE_BUILD_DEBUG=$USE_DEBUG_MODE
+node "$IF_OCTANE_ENGINE_PATH/build.js"
 
 echo '<script type="text/javascript">' >> "$PREDOC_NAME"
 if [ $USE_DEBUG_MODE -eq 0 ]; then
