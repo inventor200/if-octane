@@ -53,7 +53,6 @@ export class ClockClass {
 
     public advanceTurn(turns : number) {
         if (turns === 0) {
-            //TODO: Run substep
             this._currentSubStep++;
         }
         else if (turns > 0) {
@@ -61,11 +60,11 @@ export class ClockClass {
                 this.advanceTurnOnceForward();
             }
         }
+        if (turns >= 0) Database.solidify();
     }
 
     private advanceTurnOnceForward() {
         if (this.inPregame) return;
-        //TODO: Increment
         Database.runUpdates();
         this._currentTurn++;
         this._currentSubStep = 0;

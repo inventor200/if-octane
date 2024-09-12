@@ -94,15 +94,76 @@ export class DatabaseClass {
         this.livingObjects.push(obj);
     }
 
+    public runStarts() : void {
+        for (let i = 0; i < this.intactObjects.length; i++) {
+            const possibleStart = this.intactObjects[i].start;
+            if (possibleStart != undefined) {
+                possibleStart();
+            }
+        }
+    }
+
     public runUpdates() : void {
         for (let i = 0; i < this.livingObjects.length; i++) {
-            this.livingObjects[i].update!();
+            const obj = this.livingObjects[i];
+            if (obj.isDestroyed) {
+                // Destroyed objects do not update
+                this.livingObjects.splice(i, 1);
+                i--;
+                continue;
+            }
+            obj.update!();
+        }
+    }
+
+    private checkReachable(obj : OctaneObject) : void {
+        if (obj._markedForDestruction) return;
+        obj._markedUnreachable = false;
+        for (let i = 0; i < obj.getContentSize(); i++) {
+            this.checkReachable(obj.getContentItem(i));
         }
     }
 
     public solidify() {
-        //TODO: Review pending disconnections and destructions.
-        // Also review suspiciousLoners contents for potential destroyed loners
+        // Reset reach poll
+        for (let i = 0; i < this.intactObjects.length; i++) {
+            const obj = this.intactObjects[i];
+            // Special objects know what they're doing
+            if (obj.isSpecial()) continue;
+            obj._markedUnreachable = true;
+        }
+
+        // This also resets _markedUnreachable
+        this.checkReachable(this.rootHolderOfAll);
+
+        // Mark unreachable for destruction
+        for (let i = 0; i < this.intactObjects.length; i++) {
+            const obj = this.intactObjects[i];
+            // Special objects know what they're doing
+            if (obj.isSpecial()) continue;
+
+            // obj.isDestroyed also takes obj._markedUnreachable into account
+            if (obj.isDestroyed) {
+                if (obj.isTransient) {
+                    // Save transients from GC
+                    let found = false;
+                    for (let j = 0; j < this.transientSafety.length; j++) {
+                        if (this.transientSafety[j] === obj) {
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if (!found) this.transientSafety.push(obj);
+                }
+
+                // Toss destroyed objects to GC
+                this.objects.delete(obj.getDataIndex());
+                obj._markedForDestruction = true;
+                this.intactObjects.splice(i, 1);
+                i--;
+            }
+        }
     }
 
     public register(
@@ -174,6 +235,9 @@ export class DatabaseClass {
         }
         const ret = this.objects.get(index);
         if (ret === undefined) return null;
+        if (ret.isDestroyed) {
+            return null;
+        }
         return ret;
     }
 
@@ -196,18 +260,16 @@ export class DatabaseClass {
         return this.objects[targetIndex] === this.rootHolderOfAll;
     }
 
-    //TODO: Now that we switched to a map, we might not need a
-    //      whole object for tracking destructions, yeah?
-    public isDestroyed(target : OctaneObject | number) {
+    public isDestroyed(target : OctaneObject | number) : boolean {
         const targetIndex = this.getIndexOf(target);
         // Dissuade code from considering destroyed objects as non-null
         if (targetIndex >= this.top()) return true;
-        const fetched = this.objects.get(targetIndex);
-        if (fetched === undefined) return true;
-        return fetched === this.destroyedPlaceholder;
+        const fetched = this.get(targetIndex);
+        if (fetched === null) return true;
+        return fetched.isDestroyed;
     }
 
-    public isSpecial(target : OctaneObject | number) {
+    public isSpecial(target : OctaneObject | number) : boolean {
         let obj : undefined | number | OctaneObject = target;
         if ((typeof target) === 'number') {
             obj = this.objects.get(target as number);
@@ -240,11 +302,16 @@ export class OctaneObject {
     private _creationRecipeName : string;
     private _creationArgsCache : object;
 
+    public _markedForDestruction : boolean;
+    public _markedUnreachable : boolean;
+
     public awake : ((argumentObj : object) => void) | undefined;
     public start : (() => void) | undefined;
     public update : (() => void) | undefined;
 
     constructor(creationRecipeName : string, argumentObj : object) {
+        this._markedForDestruction = false;
+        this._markedUnreachable = false;
         this.dataIndex = Database.top();
         this._creationRecipeName = creationRecipeName;
         this._creationArgsCache = argumentObj;
@@ -256,6 +323,28 @@ export class OctaneObject {
         this.awake = undefined;
         this.start = undefined;
         this.update = undefined;
+    }
+
+    public getContentSize() : number {
+        return this.contents.length;
+    }
+
+    public getContentItem(index : number) : OctaneObject {
+        if (index > this.contents.length) {
+            throw new OctaneGameError(
+                "Index " + index + " exceeds size of contents list"
+            );
+        }
+        if (index < 0) {
+            throw new OctaneGameError(
+                "Index " + index + " is less than 0"
+            );
+        }
+        return this.contents[index];
+    }
+
+    public get isDestroyed() {
+        return this._markedForDestruction || this._markedUnreachable;
     }
 
     public markTransient() {
@@ -274,6 +363,9 @@ export class OctaneObject {
     }
 
     public get location() : OctaneObject | null {
+        if (this.isDestroyed) return null;
+        if (this._location === null) return null;
+        if (this._location.isDestroyed) return null;
         return this._location;
     }
 
@@ -282,17 +374,29 @@ export class OctaneObject {
         if (newLoc === this._location) return;
 
         if (oldLoc != undefined && oldLoc != null) {
-            oldLoc.badlyRemove(this);
+            oldLoc.remove(this);
         }
 
-        this._location = newLoc;
         if (newLoc != undefined && newLoc != null) {
-            newLoc.badlyAdd(this);
+            if (!newLoc.isDestroyed) {
+                this._location = newLoc;
+                newLoc.badlyAdd(this);
+                return;
+            }
         }
+
+        this.sever();
+        this._location = null;
     }
 
-    public badlyClearLocation() {
-        this._location = null;
+    private sever() {
+        if (this.isSpecial()) return;
+        this._markedUnreachable = true;
+    }
+
+    private unite() {
+        if (this.isSpecial()) return;
+        this._markedUnreachable = this._location!.isAlone();
     }
 
     public isSpecial() : boolean {
@@ -304,32 +408,63 @@ export class OctaneObject {
     }
 
     public hasParent() {
-        return this._location != null;
+        if (this._location === null) {
+            return false;
+        }
+
+        return !this._location.isDestroyed;
     }
 
     // Explores up the tree
     public isIn(parent : OctaneObject) : boolean {
-        if (this._location === null) return false;
+        if (this.location === null) return false;
 
-        return this._location.isIn(parent);
+        if (this._location === parent) {
+            return true;
+        }
+
+        return this._location!.isIn(parent);
     }
 
     // Only handles one step
     public isChildOf(parent : OctaneObject) : boolean {
-        if (this._location === null) return false;
+        if (this.location === null) return false;
         return this._location === parent;
     }
 
+    public isUnderTag(tag : string) : boolean {
+        if (this.isDestroyed) return false;
+        if (this.hasTag(tag)) return true;
+        if (this.location === null) return false;
+        return this._location!.isUnderTag(tag);
+    }
+
+    private sendDestruction() : void {
+        this._markedForDestruction = true;
+        for (let i = 0; i < this.contents.length; i++) {
+            this.contents[i].sendDestruction();
+        }
+    }
+
+    public destroy() : void {
+        if (this._location != null) {
+            this._location.remove(this);
+        }
+        this.sendDestruction();
+    }
+
     public isAlone() {
-        if (this.dataIndex === 0) {
-            // Index 0 is the root holder of all
+        if (this === Database.ROOT_HOLDER_OF_ALL) {
             return false;
         }
+
+        if (this.isDestroyed) return true;
         
         return this.isIn(Database.ROOT_HOLDER_OF_ALL);
     }
 
     public contains(obj : OctaneObject) {
+        if (this === obj) return true;
         for (let i = 0; i < this.contents.length; i++) {
             if (this.contents[i] === obj) return true;
         }
@@ -337,7 +472,19 @@ export class OctaneObject {
         return false;
     }
 
+    // Goes further down the tree
+    public containsSomewhere(obj : OctaneObject) {
+        if (this === obj) return true;
+        for (let i = 0; i < this.contents.length; i++) {
+            const deepReach = this.contents[i].containsSomewhere(obj);
+            if (deepReach) return true;
+        }
+
+        return false;
+    }
+
     public badlyAdd(obj : OctaneObject) {
+        obj.unite();
         if (!this.contains(obj)) {
             this.contents.push(obj);
         }
@@ -348,21 +495,17 @@ export class OctaneObject {
         obj.location = this;
     }
 
-    public badlyRemove(obj : OctaneObject) : null | OctaneObject {
+    public remove(obj : OctaneObject) : null | OctaneObject {
         for (let i = 0; i < this.contents.length; i++) {
             const grain = this.contents[i];
             if (grain === obj) {
+                obj.sever();
                 this.contents.splice(i, 1);
-                return grain;
+                return obj;
             }
         }
 
         return null;
-    }
-
-    public remove(obj : OctaneObject) : null | OctaneObject {
-        obj.badlyClearLocation();
-        return this.badlyRemove(obj);
     }
 
     // Property functions
@@ -373,29 +516,71 @@ export class OctaneObject {
         return prop;
     }
 
+    private sterilizeArray(dataProp : OctaneProperty) {
+        if (dataProp === null) return;
+        if (!Array.isArray(dataProp)) return;
+        if (dataProp.length === 0) return;
+        if (!(dataProp[0] instanceof OctaneObject)) return;
+
+        for (let i = 0; i < dataProp.length; i++) {
+            if ((dataProp[i] as OctaneObject).isAlone()) {
+                dataProp.splice(i, 1);
+                i--;
+            }
+        }
+    }
+
     public get(dataName : string) : OctaneProperty {
-        return this.narrowProperty(dataName);
+        const prop = this.narrowProperty(dataName);
+        if (prop === null) return null;
+        // Do some on-demand filtering
+        if (prop instanceof OctaneObject) {
+            // Clear this if inaccessible
+            if (prop.isAlone()) {
+                // Clean as we go
+                this.clear(dataName);
+                return null;
+            }
+        }
+        else {
+            this.sterilizeArray(prop);
+        }
+        return prop;
     }
 
     public hasStrictly(dataName : string) : boolean {
-        return this.dataProps.get(dataName) != undefined;
+        return this.get(dataName) != undefined;
     }
 
     public has(dataName : string) : boolean {
-        const value = this.dataProps.get(dataName);
+        const value = this.get(dataName);
         return value != undefined || value != null;
     }
 
     public set(dataName : string, value : OctaneProperty) {
+        if (value != null) {
+            if (value instanceof OctaneObject) {
+                // Do not add severed references
+                if (value.isAlone()) {
+                    throw new OctaneGameError(
+                        "Attempted to set destroyed/severed "+
+                        "OctaneObject to property"
+                    );
+                }
+            }
+            else {
+                this.sterilizeArray(value);
+            }
+        }
         this.dataProps.set(dataName, value);
     }
 
     public compare(dataName : string, other : OctaneProperty) : boolean {
-        return this.narrowProperty(dataName) === other;
+        return this.get(dataName) === other;
     }
 
     public compareLoosely(dataName : string, other : OctaneProperty) : boolean {
-        return this.narrowProperty(dataName) == other;
+        return this.get(dataName) == other;
     }
 
     public clear(dataName : string) : void {

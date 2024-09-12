@@ -22,6 +22,7 @@ import { say } from "./common/sayParser";
 import { startMainLoop, printProtectionLines } from "./common/platform/ui/uiBridge";
 import { Clock } from './common/clock';
 import { WaitFor } from "./common/waitForPlayer";
+import { Database } from "./common/data";
 
 declare const DEBUG : boolean;
 
@@ -106,6 +107,7 @@ export class CoreClass {
                 }
             }
             PrintHandler.showSetup();
+            Database.runStarts();
             callback();
             if (!this.started) {
                 throw new OctaneGameError(
