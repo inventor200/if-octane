@@ -51,11 +51,18 @@ export class CoreClass {
         if (DEBUG) {
             const thisCore = this;
             console.log = (message : any, ...optionalParams: any[]) : void => {
-                let buffer = "[LOG] " + String(message);
+                let buffer = "[LOG] ";
+                if ((typeof message) === 'string') {
+                    if ((message as string).startsWith('\b')) {
+                        message = (message as string).substring(1);
+                        buffer = "\b" + buffer;
+                    }
+                }
+                buffer += String(message);
                 for (let i = 0; i < optionalParams.length; i++) {
                     buffer += " " + String(optionalParams[i]);
                 }
-                buffer = "<.p>" + buffer + "<.p>";
+                buffer += "\b";
                 if (thisCore.allowLogging) {
                     say(buffer);
                 }
@@ -87,6 +94,8 @@ export class CoreClass {
     public async enable(callback : () => void) : Promise<void> {
         if (this.enabled) return;
         this.enabled = true;
+        
+        Database.unpack();
 
         // Make sure we don't overwrite any logs
         printProtectionLines();
@@ -107,7 +116,6 @@ export class CoreClass {
                 }
             }
             PrintHandler.showSetup();
-            Database.runStarts();
             callback();
             if (!this.started) {
                 throw new OctaneGameError(
@@ -124,7 +132,9 @@ export class CoreClass {
     public start(callback : () => void) : void {
         if (this.started) return;
         this.started = true;
+        Database.runStarts();
         //TODO: Save init state for restarts?
+        Database.doAfterLoad(); // Also do this after loading a save
         startMainLoop();
         WaitFor.Player(() => {
             Clock.finishPreGame();
