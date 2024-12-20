@@ -28,7 +28,7 @@ import {
     GAME_IFID, GAME_VERSION, GAME_PUBLISH_DATE
 } from '../../../common/gameInfo';
 import { gameTitleLevel, turnTitleLevel, printProtectionLines } from './uiBridge';
-import { WaitFor } from "../../../common/waitForPlayer";
+import { WaitFor } from "../../../common/time/waitForPlayer";
 
 const P_BREAK = '\r';
 const FOOTER_PREFIX = " \x1b[7m   ";

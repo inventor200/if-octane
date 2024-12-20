@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { OctaneGameError } from "./exceptions";
+import { OctaneGameError } from "../exceptions";
 import { OctaneObject } from './octaneObject';
 
 export type OctaneProperty = null | number | string | boolean | OctaneObject |

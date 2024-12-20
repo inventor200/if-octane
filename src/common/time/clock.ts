@@ -14,9 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { Database } from './data';
-import { FIRST_TURN_TITLE } from './miscTools';
-import { PrintHandler } from "./platform/ui/printHandler";
+import { Database } from '../world/data';
+import { FIRST_TURN_TITLE } from '../miscTools';
+import { PrintHandler } from "../platform/ui/printHandler";
 
 export class ClockClass {
     private static _instance : ClockClass;
@@ -51,16 +51,16 @@ export class ClockClass {
         this.advanceTurn(turnNumber - this._currentTurn);
     }
 
-    public advanceTurn(turns : number) {
+    public advanceTurn(turns : number = 1, substeps : number = 0) {
         if (turns === 0) {
-            this._currentSubStep++;
+            this._currentSubStep += substeps;
         }
         else if (turns > 0) {
             for (let i = 0; i < turns; i++) {
                 this.advanceTurnOnceForward();
             }
         }
-        if (turns >= 0) Database.solidify();
+        Database.solidify();
     }
 
     private advanceTurnOnceForward() {

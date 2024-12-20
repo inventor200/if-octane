@@ -14,28 +14,17 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { PrintHandler } from "./platform/ui/printHandler";
+import { PostedAction } from "./postedAction";
 
-export class WaitForPlayerHandlerClass {
-    private static _instance: WaitForPlayerHandlerClass;
-
-    public waitingForPlayer : boolean;
-
-    public disarm : () => void;
-
-    constructor() {
-        this.waitingForPlayer = false;
-        this.disarm = () => { };
-    }
-
-    public static get Instance() {
-        return this._instance || (this._instance = new this());
-    }
-
-    public async Player(callback : () => void) {
-        this.waitingForPlayer = true;
-        this.disarm = callback;
-    }
+// Actions are assembled into group layers. When an action opens a submenu,
+// a new layer is created below, which get hotkey preference.
+// When a proper action is chosen, all layers are closed, and the
+// final output action remains in the transcript.
+export interface ActionGroupLayer {
+    isLayer: boolean;
+    hasPriority: boolean;
+    newActions: PostedAction[];
+    newlyDisabledActions: PostedAction[];
+    familiarActions: PostedAction[];
+    totalActions: PostedAction[];
 }
-
-export const WaitFor = WaitForPlayerHandlerClass.Instance;

@@ -15,8 +15,8 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import { PrintHandler, NodeTurnBlock } from "./printHandler";
-import { WaitFor } from "../../../common/waitForPlayer";
-import { Clock } from "../../../common/clock";
+import { WaitFor } from "../../../common/time/waitForPlayer";
+import { Clock } from "../../../common/time/clock";
 import { KeyStroke, getKey } from "./keyStroke";
 
 const simpleScrollAmount = 3;
@@ -114,7 +114,7 @@ class NodeInterfaceClass {
         if (WaitFor.waitingForPlayer) {
             WaitFor.waitingForPlayer = false;
             WaitFor.disarm();
-            Clock.advanceTurn(0);
+            Clock.advanceTurn(0, 0);
             return;
         }
     }

@@ -20,9 +20,9 @@ import { Bootstrapper } from "./platforms/nodejs/ui/bootstrapper";
 import { OctaneEngineError, OctaneGameError } from './common/exceptions';
 import { say } from "./common/sayParser";
 import { startMainLoop, printProtectionLines } from "./common/platform/ui/uiBridge";
-import { Clock } from './common/clock';
-import { WaitFor } from "./common/waitForPlayer";
-import { Database } from "./common/data";
+import { Clock } from './common/time/clock';
+import { WaitFor } from "./common/time/waitForPlayer";
+import { Database } from "./common/world/data";
 
 declare const DEBUG : boolean;
 

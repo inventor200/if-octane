@@ -14,9 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { OctaneGameError } from "./exceptions";
+import { OctaneGameError } from "../exceptions";
 import { Database, OctaneProperty } from "./data";
-import { Core } from "../core";
+import { Core } from "../../core";
 
 export class OctaneObject {
     private dataIndex : number;
