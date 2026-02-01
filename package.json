@@ -1,18 +1,16 @@
 {
-  "name": "if-octane",
-  "version": "1.0.0",
-  "description": "An accessible interactive fiction game engine.",
-  "main": "build.js",
-  "scripts": {
-    "build": "node build.mjs --source-dir test-folder -wdv",
-    "build-node": "node build.mjs --source-dir test-folder -ndv",
-    "debug-node": "node --enable-source-maps test-folder/out.js --width 80",
-    "reload-node": "npm run build-node && npm run debug-node",
-    "verify-release-node": "node build.mjs --source-dir test-folder -nv && node test-folder/Test-Title-v0-9-beta.js --width 80"
-  },
-  "author": "Joseph Cramsey",
-  "license": "MIT",
-  "devDependencies": {
-    "esbuild": "^0.27.2"
-  }
+    "name": "if-octane",
+    "version": "1.0.0",
+    "description": "An accessible interactive fiction game engine.",
+    "scripts": {
+        "dev": "NODE_ENV=development node build.js",
+        "build": "NODE_ENV=production node build.js"
+    },
+    "author": "Joey Tanden",
+    "license": "MIT",
+    "devDependencies": {
+        "esbuild": "^0.27.2",
+        "esbuild-sass-plugin": "^3.6.0",
+        "typescript": "^5.9.3"
+    }
 }
