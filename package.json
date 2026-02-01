@@ -13,9 +13,6 @@
   "author": "Joseph Cramsey",
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^20.14.12",
-    "esbuild": "^0.23.0",
-    "esbuild-plugin-tsc": "^0.4.0",
-    "yaml": "^2.5.1"
+    "esbuild": "^0.27.2"
   }
 }
