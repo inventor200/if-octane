@@ -1,14 +1,14 @@
 import { Boolable, BoolReturn, evaluateBoolReturn, isBoolable } from "./boolable";
 
 export class BoolTree implements Boolable {
-  public mainCondition: BoolReturn;
+  private mainCondition: BoolReturn;
   public andConditions: Boolable[];
   public orConditions: Boolable[];
   public nandConditions: Boolable[];
   public norConditions: Boolable[];
   public readonly isBoolable: true;
   
-  constructor(mainCondition?: BoolReturn) {
+  public constructor(mainCondition?: BoolReturn) {
     this.isBoolable = true;
     this.andConditions = [];
     this.orConditions = [];
@@ -23,7 +23,7 @@ export class BoolTree implements Boolable {
     }
   }
 
-  setActive(newMain: BoolReturn): Boolable {
+  public setActive(newMain: BoolReturn): Boolable {
     this.mainCondition = newMain;
 
     return this;
@@ -43,24 +43,24 @@ export class BoolTree implements Boolable {
     return this;
   }
 
-  and(...conditions: BoolReturn[]): Boolable {
+  public and(...conditions: BoolReturn[]): Boolable {
     return this.incorporate(this.andConditions, conditions);
   }
 
-  or(...conditions: BoolReturn[]): Boolable {
+  public or(...conditions: BoolReturn[]): Boolable {
     return this.incorporate(this.orConditions, conditions);
   }
 
-  nand(...conditions: BoolReturn[]): Boolable {
+  public nand(...conditions: BoolReturn[]): Boolable {
     return this.incorporate(this.nandConditions, conditions);
   }
 
-  nor(...conditions: BoolReturn[]): Boolable {
+  public nor(...conditions: BoolReturn[]): Boolable {
     return this.incorporate(this.norConditions, conditions);
   }
 
   // main && and && or && !(nand || nor)
-  isActive(): boolean {
+  public isActive(): boolean {
     const mainEvaluation = evaluateBoolReturn(this.mainCondition);
     if (!mainEvaluation) return false;
 
@@ -100,7 +100,7 @@ export class BoolTree implements Boolable {
   }
 
   // The lists are cloned, but the items are all references
-  shallowClone(): BoolTree {
+  public shallowClone(): BoolTree {
     const clone = new BoolTree(this.mainCondition);
 
     const shallowCopyTo = (src: Boolable[], dst: Boolable[]): void => {
@@ -118,7 +118,7 @@ export class BoolTree implements Boolable {
   }
 
   // Everything is cloned
-  clone(): Boolable {
+  public clone(): Boolable {
     const clone = new BoolTree(this.mainCondition);
 
     const deepCopyTo = (src: Boolable[], dst: Boolable[]): void => {
