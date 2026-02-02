@@ -3,14 +3,21 @@
     "version": "1.0.0",
     "description": "An accessible interactive fiction game engine.",
     "scripts": {
+        "test": "npx jest",
         "dev": "NODE_ENV=development node build.js",
         "build": "NODE_ENV=production node build.js"
     },
     "author": "Joey Tanden",
     "license": "MIT",
     "devDependencies": {
+        "@types/jest": "^30.0.0",
         "esbuild": "^0.27.2",
         "esbuild-sass-plugin": "^3.6.0",
+        "jest": "^30.2.0",
+        "ts-jest": "^29.4.6",
         "typescript": "^5.9.3"
+    },
+    "dependencies": {
+        "uuid": "^13.0.0"
     }
 }
