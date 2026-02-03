@@ -1,14 +1,15 @@
 import { Boolable, BoolReturn, evaluateBoolReturn, isBoolable } from "./boolable";
+import { Option, some } from "./option";
 
 export class BoolTree implements Boolable {
-  private mainCondition: BoolReturn;
-  public andConditions: Boolable[];
-  public orConditions: Boolable[];
-  public nandConditions: Boolable[];
-  public norConditions: Boolable[];
+  private mainCondition: Option<BoolReturn>;
+  public andConditions: Option<Boolable>[];
+  public orConditions: Option<Boolable>[];
+  public nandConditions: Option<Boolable>[];
+  public norConditions: Option<Boolable>[];
   public readonly isBoolable: true;
   
-  public constructor(mainCondition?: BoolReturn) {
+  public constructor(mainCondition?: (BoolReturn | Option<BoolReturn>)) {
     this.isBoolable = true;
     this.andConditions = [];
     this.orConditions = [];
@@ -16,27 +17,32 @@ export class BoolTree implements Boolable {
     this.norConditions = [];
     
     if (mainCondition !== undefined) {
-      this.mainCondition = mainCondition;
+      if (mainCondition instanceof Option) {
+        this.mainCondition = mainCondition;
+      }
+      else {
+        this.mainCondition = some(mainCondition);
+      }
     }
     else {
-      this.mainCondition = true;
+      this.mainCondition = some(true);
     }
   }
 
   public setActive(newMain: BoolReturn): Boolable {
-    this.mainCondition = newMain;
+    this.mainCondition = some(newMain);
 
     return this;
   }
 
-  private incorporate(list: Boolable[], conditions: BoolReturn[]): Boolable {
+  private incorporate(list: Option<Boolable>[], conditions: BoolReturn[]): Boolable {
     for (let i = 0; i < conditions.length; i++) {
       const condition = conditions[i];
       if (isBoolable(condition)) {
-        list.push(condition as Boolable);
+        list.push(some(condition as Boolable));
       }
       else {
-        list.push(new BoolTree(condition));
+        list.push(some(new BoolTree(some(condition))));
       }
     }
 
@@ -61,14 +67,24 @@ export class BoolTree implements Boolable {
 
   // main && and && or && !(nand || nor)
   public isActive(): boolean {
-    const mainEvaluation = evaluateBoolReturn(this.mainCondition);
+    if (this.mainCondition.isNone()) return false;
+    const mainEvaluation = evaluateBoolReturn(this.mainCondition.get()!);
     if (!mainEvaluation) return false;
 
-    const evalAbstract = (emptyVal: boolean, list: Boolable[], checkVal: boolean): boolean => {
+    const evalAbstract = (emptyVal: boolean, list: Option<Boolable>[], checkVal: boolean): boolean => {
       if (list.length === 0) return emptyVal;
 
       for (let i = 0; i < list.length; i++) {
-        const listCondition = list[i].isActive();
+        const listItem = list[i];
+
+        const isNone = listItem.isNone();
+        const listCondition = isNone ? emptyVal : listItem.get()!.isActive();
+
+        if (isNone) { // Drop the items for optimization
+          list.splice(i, 1);
+          i--;
+          continue;
+        }
 
         if (listCondition === checkVal) return checkVal;
       }
@@ -76,11 +92,11 @@ export class BoolTree implements Boolable {
       return !checkVal;
     }
     
-    const evalAnd = (emptyVal: boolean, list: Boolable[]): boolean => {
+    const evalAnd = (emptyVal: boolean, list: Option<Boolable>[]): boolean => {
       return evalAbstract(emptyVal, list, false);
     }
     
-    const evalOr = (emptyVal: boolean, list: Boolable[]): boolean => {
+    const evalOr = (emptyVal: boolean, list: Option<Boolable>[]): boolean => {
       return evalAbstract(emptyVal, list, true);
     }
 
@@ -103,9 +119,17 @@ export class BoolTree implements Boolable {
   public shallowClone(): BoolTree {
     const clone = new BoolTree(this.mainCondition);
 
-    const shallowCopyTo = (src: Boolable[], dst: Boolable[]): void => {
+    const shallowCopyTo = (src: Option<Boolable>[], dst: Option<Boolable>[]): void => {
       for (let i = 0; i < src.length; i++) {
-        dst.push(src[i]);
+        const item = src[i];
+
+        if (item.isNone()) { // Drop the items for optimization
+          src.splice(i, 1);
+          i--;
+          continue
+        }
+        
+        dst.push(item);
       }
     }
 
@@ -118,12 +142,27 @@ export class BoolTree implements Boolable {
   }
 
   // Everything is cloned
-  public clone(): Boolable {
+  public clone(): BoolTree {
     const clone = new BoolTree(this.mainCondition);
 
-    const deepCopyTo = (src: Boolable[], dst: Boolable[]): void => {
+    const deepCopyTo = (src: Option<Boolable>[], dst: Option<Boolable>[]): void => {
       for (let i = 0; i < src.length; i++) {
-        dst.push(src[i].clone());
+        const item = src[i];
+
+        if (item.isNone()) { // Drop the items for optimization
+          src.splice(i, 1);
+          i--;
+          continue
+        }
+
+        const confirmed = item.get()!;
+
+        if (confirmed instanceof BoolTree) {
+          dst.push(some((confirmed as BoolTree).clone()))
+        }
+        else {
+          dst.push(some(confirmed));
+        }
       }
     }
 

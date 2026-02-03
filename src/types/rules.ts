@@ -30,5 +30,15 @@ export class Rules {
 }
 
 function toSearchTerm(name: string): string {
-  return name.trim().toLowerCase();
+  const oldName = name.trim().toLowerCase();
+
+  let newName = "";
+
+  for (let i = 0; i < oldName.length; i++) {
+    const c = oldName[i];
+    if (c === ' ' || c === '-') newName += '_';
+    else newName += c;
+  }
+
+  return newName;
 }

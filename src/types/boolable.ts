@@ -7,7 +7,6 @@ export interface Boolable {
   nand: (...conditions: BoolReturn[]) => Boolable,
   nor: (...conditions: BoolReturn[]) => Boolable,
   isActive: () => boolean,
-  clone: () => Boolable,
   readonly isBoolable: true
 };
 
@@ -20,14 +19,12 @@ export function isBoolable(value: any): boolean {
   if (!value.nand) return false;
   if (!value.nor) return false;
   if (!value.isActive) return false;
-  if (!value.clone) return false;
   if (typeof value.setActive !== 'function') return false;
   if (typeof value.and !== 'function') return false;
   if (typeof value.or !== 'function') return false;
   if (typeof value.nand !== 'function') return false;
   if (typeof value.nor !== 'function') return false;
   if (typeof value.isActive !== 'function') return false;
-  if (typeof value.clone !== 'function') return false;
   return true;
 }
 
