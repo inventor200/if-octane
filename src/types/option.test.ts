@@ -1,5 +1,5 @@
 import { some } from "./option";
-import { OctaneEntity } from "./ecs";
+import { createEntity, createTestGlobal } from "./global-context";
 
 test('Valid options stay valid', () => {
   const val = some(5);
@@ -8,7 +8,9 @@ test('Valid options stay valid', () => {
 });
 
 test('Destroyed options become none', () => {
-  const entity = new OctaneEntity();
+  const testCtx = createTestGlobal();
+
+  const entity = createEntity(testCtx).get()!;
   const val = some(entity);
 
   expect(val.isSome()).toBe(true);

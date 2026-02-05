@@ -1,9 +1,16 @@
 import { Rules } from "./rules";
-import { Option } from "./option";
+import { some, Option } from "./option";
 import { Boolable, BoolReturn } from "./boolable";
 import { OctaneEntity, OctaneWorld } from "./ecs";
 
-class GlobalContext {
+export type GameContext = Option<UnsafeGlobalContext>;
+
+export interface UnsafeGlobalContext {
+  readonly rules: Rules;
+  readonly world: OctaneWorld;
+}
+
+class GlobalContext implements UnsafeGlobalContext {
   private static _instance: GlobalContext;
   readonly rules: Rules;
   readonly world: OctaneWorld;
@@ -13,35 +20,56 @@ class GlobalContext {
     this.rules = new Rules();
   }
 
-  public static getGlobal() {
+  public static getGlobal(ctx: GameContext): UnsafeGlobalContext {
+    if (ctx.isSome()) return ctx.get()!;
     return this._instance || (this._instance = new this());
   }
 
-  public static resetGlobal() {
+  public static resetGlobal(ctx: GameContext): GameContext {
+    if (ctx.isSome()) return createTestGlobal();
     this._instance = new this();
+    return some(this._instance);
   }
 }
 
-export function resetGlobal(): void {
-  return GlobalContext.resetGlobal();
+class TestGlobalContext implements UnsafeGlobalContext {
+  readonly rules: Rules;
+  readonly world: OctaneWorld;
+
+  constructor() {
+    this.world = new OctaneWorld();
+    this.rules = new Rules();
+  }
 }
 
-export function getRule(name: string): Option<Boolable> {
-  return GlobalContext.getGlobal().rules.get(name);
+export function resolveGlobalForEntityCreation(ctx: GameContext): GameContext {
+  return some(GlobalContext.getGlobal(ctx));
 }
 
-export function addRule(name: string, rule: Boolable): boolean {
-  return GlobalContext.getGlobal().rules.push(name, rule);
+export function createTestGlobal(): GameContext {
+  return some(new TestGlobalContext());
 }
 
-export function createEntity(startsActive?: BoolReturn, name?: string): Option<OctaneEntity> {
-  return GlobalContext.getGlobal().world.createEntity(startsActive, name);
+export function resetGlobal(ctx: GameContext): GameContext {
+  return GlobalContext.resetGlobal(ctx);
 }
 
-export function getEntity(name: string): Option<OctaneEntity> {
-  return GlobalContext.getGlobal().world.getEntity(name);
+export function getRule(ctx: GameContext, name: string): Option<Boolable> {
+  return GlobalContext.getGlobal(ctx).rules.get(name);
 }
 
-export function clk(useTurnStep: boolean): void {
-  return GlobalContext.getGlobal().world.clk(useTurnStep);
+export function addRule(ctx: GameContext, name: string, rule: Boolable): boolean {
+  return GlobalContext.getGlobal(ctx).rules.push(name, rule);
+}
+
+export function createEntity(ctx: GameContext, startsActive?: BoolReturn, name?: string): OctaneEntity {
+  return GlobalContext.getGlobal(ctx).world.createEntity(ctx, startsActive, name);
+}
+
+export function getEntity(ctx: GameContext, name: string): OctaneEntity {
+  return GlobalContext.getGlobal(ctx).world.getEntity(name);
+}
+
+export function clk(ctx: GameContext, useTurnStep: boolean): void {
+  return GlobalContext.getGlobal(ctx).world.clk(useTurnStep);
 }

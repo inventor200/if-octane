@@ -23,8 +23,11 @@ export function some<T>(item: T): Option<T> {
   return new Option<T>(filterDestroyable(item));
 }
 
+// Reusable none for memory efficiency
+export const NONE = new Option(null);
+
 export function none<T>(): Option<T> {
-  return new Option<T>(null);
+  return NONE as Option<T>;
 }
 
 function filterDestroyable<T>(obj: T | null | undefined): T | null {

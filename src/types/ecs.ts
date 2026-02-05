@@ -2,9 +2,12 @@ import { Boolable, BoolReturn, isBoolable } from "./boolable";
 import { BoolTree } from "./bool-tree";
 import { none, Option, some } from "./option";
 import { toSearchTerm } from "./util";
+import { GameContext, resolveGlobalForEntityCreation } from "./global-context";
+
+export type OctaneEntity = Option<UnsafeOctaneEntity>;
 
 export class OctaneWorld {
-  private readonly entities: Map<string, Option<OctaneEntity>>;
+  private readonly entities: Map<string, OctaneEntity>;
   private anonymousCount: number;
   
   public constructor() {
@@ -18,28 +21,28 @@ export class OctaneWorld {
     return name;
   }
 
-  public createEntity(startsActive?: BoolReturn, name?: string): Option<OctaneEntity> {
+  public createEntity(ctx: GameContext, startsActive?: BoolReturn, name?: string): OctaneEntity {
     if (name === undefined) name = this.createAnonymousName();
     const newName = toSearchTerm(name);
     
     if (newName.length === 0) {
       console.error("Error while creating entity with empty name!");
-      return this.createEntity(startsActive);
+      return this.createEntity(ctx, startsActive);
     }
     
     if (this.entities.has(newName)) {
       console.error("Error trying to recreate " + newName + "!");
-      return this.createEntity(startsActive, newName + "_dup");
+      return this.createEntity(ctx, startsActive, newName + "_dup");
     }
 
-    const entity = new OctaneEntity(startsActive);
+    const entity = new UnsafeOctaneEntity(ctx, startsActive);
     this.entities.set(newName, some(entity));
 
     // Send back a separate wrapper, juuuuust in case
     return some(entity);
   }
 
-  public getEntity(name: string): Option<OctaneEntity> {
+  public getEntity(name: string): OctaneEntity {
     if (!this.entities.has(name)) return none();
     
     const retrieved = this.entities.get(name)!.get();
@@ -80,14 +83,17 @@ export interface Destroyable {
   isDestroyed: false | true;
 };
 
-export class OctaneEntity implements Boolable, Destroyable {
+// Named "unsafe" to encourage using the wrapper type
+export class UnsafeOctaneEntity implements Boolable, Destroyable {
   public readonly isBoolable: true;
   public readonly isDestroyable: true;
   private readonly activeSwitch: Boolable;
   isDestroyed: boolean;
   public readonly components: OctaneComponent[];
+  public readonly ctx: GameContext;
 
-  constructor(startsActive?: BoolReturn) {
+  constructor(ctx: GameContext, startsActive?: BoolReturn) {
+    this.ctx = resolveGlobalForEntityCreation(ctx);
     this.isBoolable = true;
     this.isDestroyable = true;
     this.isDestroyed = false;
@@ -104,7 +110,7 @@ export class OctaneEntity implements Boolable, Destroyable {
     this.components = [];
   }
 
-  public add(...components: OctaneComponent[]): OctaneEntity {
+  public add(...components: OctaneComponent[]): UnsafeOctaneEntity {
     for (let i = 0; i < components.length; i++) {
       this.components.push(components[i]);
     }
@@ -168,14 +174,14 @@ export class OctaneEntity implements Boolable, Destroyable {
     return this;
   }
 
-  public clk(useTurnStep: boolean): boolean {
+  clk(useTurnStep: boolean): boolean {
     if (this.isDestroyed) return false;
     
     const nowActive = this.isActive();
 
     if (nowActive) {
       for (let i = 0; i < this.components.length; i++) {
-        this.components[i].clk(nowActive, useTurnStep);
+        this.components[i].clk(this.ctx, nowActive, useTurnStep);
       }
     }
 
@@ -186,7 +192,7 @@ export class OctaneEntity implements Boolable, Destroyable {
     if (this.isDestroyed) return false;
 
     while (this.components.length > 0) {
-      this.components.shift()!.onDestroy();
+      this.components.shift()!.onDestroy(this.ctx);
     }
 
     this.isDestroyed = true;
@@ -219,7 +225,7 @@ export abstract class OctaneComponent implements Boolable {
   public readonly isBoolable: true;
   private readonly activeSwitch: Boolable;
   private wasActive: boolean;
-  private entity: Option<OctaneEntity>;
+  private entity: OctaneEntity;
   private ranStart: boolean;
   private ranStartWithTurnStep: boolean;
 
@@ -227,7 +233,7 @@ export abstract class OctaneComponent implements Boolable {
     this.isBoolable = true;
     this.ranStart = false;
     this.ranStartWithTurnStep = false;
-    this.entity = some(entity);
+    this.entity = entity;
     
     if (startsActive === undefined) {
       this.activeSwitch = new BoolTree(true);
@@ -241,7 +247,11 @@ export abstract class OctaneComponent implements Boolable {
     
     this.wasActive = false;
 
-    this.onAwake();
+    const parentEntity = this.entity.get();
+
+    if (parentEntity != null) {
+      this.onAwake(parentEntity.ctx);
+    }
   }
 
   public isActive(): boolean {
@@ -283,42 +293,42 @@ export abstract class OctaneComponent implements Boolable {
     return this;
   }
 
-  clk(entityActiveCache: boolean, useTurnStep: boolean): void {
+  clk(ctx: GameContext, entityActiveCache: boolean, useTurnStep: boolean): void {
     const nowActive = entityActiveCache && this.isActiveSelf();
 
     if (nowActive != this.wasActive) {
       if (nowActive) {
-        this.onEnable(useTurnStep);
+        this.onEnable(ctx, useTurnStep);
       }
       else {
-        this.onDisable(useTurnStep);
+        this.onDisable(ctx, useTurnStep);
       }
     }
 
     if (nowActive) {
-      this.start(useTurnStep);
-      this.onClk(useTurnStep);
+      this.start(ctx, useTurnStep);
+      this.onClk(ctx, useTurnStep);
     }
 
     this.wasActive = nowActive;
   }
 
-  start(useTurnStep: boolean): void {
+  start(ctx: GameContext, useTurnStep: boolean): void {
     if (!this.ranStart) {
       this.ranStart = true;
-      this.onStart(false);
+      this.onStart(ctx, false);
     }
 
     if (useTurnStep && !this.ranStartWithTurnStep) {
       this.ranStartWithTurnStep = true;
-      this.onStart(true);
+      this.onStart(ctx, true);
     }
   }
   
-  protected abstract onClk(useTurnStep: boolean): void;
-  protected abstract onAwake(): void;
-  protected abstract onStart(useTurnStep: boolean): void;
-  protected abstract onEnable(useTurnStep: boolean): void;
-  protected abstract onDisable(useTurnStep: boolean): void;
-  abstract onDestroy(): void;
+  protected abstract onClk(ctx: GameContext, useTurnStep: boolean): void;
+  protected abstract onAwake(ctx: GameContext): void;
+  protected abstract onStart(ctx: GameContext, useTurnStep: boolean): void;
+  protected abstract onEnable(ctx: GameContext, useTurnStep: boolean): void;
+  protected abstract onDisable(ctx: GameContext, useTurnStep: boolean): void;
+  abstract onDestroy(ctx: GameContext): void;
 }
