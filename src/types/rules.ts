@@ -1,5 +1,6 @@
 import { Boolable } from "./boolable";
 import { none, Option, some } from "./option";
+import { toSearchTerm } from "./util";
 
 export class Rules {
   private readonly ruleMap: Map<string, Boolable>;
@@ -27,18 +28,4 @@ export class Rules {
 
     return some(found);
   }
-}
-
-function toSearchTerm(name: string): string {
-  const oldName = name.trim().toLowerCase();
-
-  let newName = "";
-
-  for (let i = 0; i < oldName.length; i++) {
-    const c = oldName[i];
-    if (c === ' ' || c === '-') newName += '_';
-    else newName += c;
-  }
-
-  return newName;
 }

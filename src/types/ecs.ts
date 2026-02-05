@@ -1,6 +1,79 @@
 import { Boolable, BoolReturn, isBoolable } from "./boolable";
 import { BoolTree } from "./bool-tree";
 import { none, Option, some } from "./option";
+import { toSearchTerm } from "./util";
+
+export class OctaneWorld {
+  private readonly entities: Map<string, Option<OctaneEntity>>;
+  private anonymousCount: number;
+  
+  public constructor() {
+    this.entities = new Map();
+    this.anonymousCount = 0;
+  }
+
+  private createAnonymousName(): string {
+    const name = "anonymous_entity" + String(this.anonymousCount);
+    this.anonymousCount++;
+    return name;
+  }
+
+  public createEntity(startsActive?: BoolReturn, name?: string): Option<OctaneEntity> {
+    if (name === undefined) name = this.createAnonymousName();
+    const newName = toSearchTerm(name);
+    
+    if (newName.length === 0) {
+      console.error("Error while creating entity with empty name!");
+      return this.createEntity(startsActive);
+    }
+    
+    if (this.entities.has(newName)) {
+      console.error("Error trying to recreate " + newName + "!");
+      return this.createEntity(startsActive, newName + "_dup");
+    }
+
+    const entity = new OctaneEntity(startsActive);
+    this.entities.set(newName, some(entity));
+
+    // Send back a separate wrapper, juuuuust in case
+    return some(entity);
+  }
+
+  public getEntity(name: string): Option<OctaneEntity> {
+    if (!this.entities.has(name)) return none();
+    
+    const retrieved = this.entities.get(name)!.get();
+
+    if (retrieved === null) {
+      this.entities.delete(name);
+      return none();
+    }
+
+    // Send back a separate wrapper, juuuuust in case
+    return some(retrieved);
+  }
+
+  public clk(useTurnStep: boolean): void {
+    const destroyedEntities: string[] = [];
+    
+    for (const [key, value] of this.entities) {
+      const entity = value.get();
+      if (entity === null) {
+        // Mark for cleanup
+        destroyedEntities.push(key);
+      }
+      else {
+        // Iterate
+        entity.clk(useTurnStep);
+      }
+    }
+
+    // Trim destroyed entities from map for GC to claim
+    for (let i = 0; i < destroyedEntities.length; i++) {
+      this.entities.delete(destroyedEntities[i]);
+    }
+  }
+}
 
 export interface Destroyable {
   readonly isDestroyable: true;
@@ -14,7 +87,7 @@ export class OctaneEntity implements Boolable, Destroyable {
   isDestroyed: boolean;
   public readonly components: OctaneComponent[];
 
-  public constructor(startsActive?: BoolReturn) {
+  constructor(startsActive?: BoolReturn) {
     this.isBoolable = true;
     this.isDestroyable = true;
     this.isDestroyed = false;
